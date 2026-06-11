@@ -1,2 +1,6 @@
 .DS_Store
 Arquitectura.png
+
+# Preview / harness temporales
+_harness.html
+erp-calc.test-data.js

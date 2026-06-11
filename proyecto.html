@@ -70,6 +70,23 @@
   .check-list label { display:flex; align-items:center; gap:10px; font-size:14px; cursor:pointer; }
   .check-list input { width:18px; height:18px; }
   .ro-note { font-size:12.5px; color:var(--ink-soft); margin-bottom:14px; }
+
+  /* Cuadros calculados (resultado read-only) */
+  .ctable { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .ctable th { text-align:right; font-size:11px; font-weight:700; color:var(--ink-soft);
+    padding:6px 9px; border-bottom:2px solid var(--line); white-space:nowrap; }
+  .ctable th:first-child { text-align:left; }
+  .ctable td { padding:5px 9px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+  .ctable td:first-child { text-align:left; font-weight:600; }
+  .ctable tr.tot td { font-weight:800; border-top:2px solid var(--brand); border-bottom:none;
+    background:var(--brand-soft); color:var(--brand); }
+  .cuadro-h { display:flex; align-items:center; gap:8px; margin:0 0 10px; }
+  .cuadro-tag { font-size:11px; font-weight:800; padding:2px 9px; border-radius:999px; color:#fff; }
+  .grp-head th { text-align:center; font-size:10.5px; color:var(--brand); border-bottom:1px solid var(--brand-soft);
+    text-transform:uppercase; letter-spacing:.4px; }
+  .verif { padding:10px 14px; border-radius:10px; font-size:13px; font-weight:600; margin-top:12px; }
+  .verif.ok { background:#DCFCE7; color:#166534; }
+  .verif.warn { background:#FEE2E2; color:#991B1B; }
 </style>
 </head>
 <body>
@@ -101,6 +118,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-init.js"></script>
 <script src="erp-helpers.js"></script>
+<script src="erp-calc.js"></script>
 <script>
 let CURRENT_USER = null;
 let PROJECT = null;
@@ -205,7 +223,7 @@ function renderTab(k) {
   else if (k === 'terreno') c.innerHTML = tabTerreno();
   else if (k === 'normativa') c.innerHTML = tabNormativa();
   else if (k === 'alturas') c.innerHTML = tabAlturas();
-  else if (k === 'superficies') c.innerHTML = tabPlaceholder('Superficies (Municipal · Construcción · Comercial)', 'Fase 3 — motor de cálculo erp-calc.js');
+  else if (k === 'superficies') { c.innerHTML = tabSuperficies(); recalcSuperficies(); }
   else if (k === 'estocp') c.innerHTML = tabPlaceholder('Estacionamientos y Carga de Ocupación', 'Fase 4');
   else if (k === 'documentos') c.innerHTML = tabPlaceholder('Documentos del proyecto', 'Fase 4 — almacenamiento en Firebase Storage');
   else if (k === 'bitacora') c.innerHTML = tabPlaceholder('Bitácora de cambios', 'Fase 4');
@@ -501,6 +519,159 @@ function collectAlturas() {
 }
 
 async function saveAlturas() { await doSave('saveAlturas', collectAlturas()); }
+
+// ============================================================
+//  SUPERFICIES (motor erp-calc)
+// ============================================================
+const CUADRO_META = {
+  municipal:    { l: 'Municipal',    color: '#D97706' },
+  construccion: { l: 'Construcción', color: '#B45309' },
+  comercial:    { l: 'Comercial',    color: '#DB2777' }
+};
+
+function cuadrosForRole(user) {
+  if (['superadmin', 'director', 'arquitecto'].includes(user.role)) return ['municipal', 'construccion', 'comercial'];
+  if (user.role === 'municipal') return ['municipal'];
+  if (user.role === 'construccion') return ['construccion'];
+  if (user.role === 'comercial') return ['comercial'];
+  return [];
+}
+
+function tabSuperficies() {
+  // Encabezados agrupados de la tabla de entrada
+  let groups = [], last = null;
+  ERP.SUP_FIELDS.forEach(f => {
+    if (f.g !== last) { groups.push({ g: f.g, n: 1 }); last = f.g; }
+    else groups[groups.length - 1].n++;
+  });
+  const grpRow = '<tr class="grp-head"><th></th>' +
+    groups.map(gr => '<th colspan="' + gr.n + '">' + E(gr.g) + '</th>').join('') +
+    (EDIT ? '<th></th>' : '') + '</tr>';
+  const colRow = '<tr><th>Nivel</th>' +
+    ERP.SUP_FIELDS.map(f => '<th>' + E(f.l) + '</th>').join('') +
+    (EDIT ? '<th></th>' : '') + '</tr>';
+
+  return '' + roNote() +
+    '<div class="sec">' +
+      '<div class="sec-title">Datos de superficies por nivel</div>' +
+      '<div class="ro-note">Ingresa una fila por nivel, de abajo hacia arriba (subterráneos, pisos, sala de máquinas). Los cuadros se recalculan automáticamente.</div>' +
+      '<div class="tbl-scroll"><table class="dtable">' +
+        '<thead>' + grpRow + colRow + '</thead>' +
+        '<tbody id="pisosBody">' + renderPisoRows() + '</tbody>' +
+      '</table></div>' +
+      (EDIT ? '<div class="row-actions"><button class="btn soft" onclick="addPiso()">+ Agregar nivel</button></div>' : '') +
+      (EDIT ? '<div class="save-bar"><button class="btn" id="btn-savePisos" onclick="savePisos()">Guardar superficies</button>' +
+        '<span id="msg-savePisos" class="save-msg"></span></div>' : '') +
+    '</div>' +
+    '<div class="sec"><div class="sec-title">Cuadros calculados</div>' +
+      '<div id="cuadrosBox"></div>' +
+      '<div id="verifBox"></div>' +
+    '</div>';
+}
+
+function renderPisoRows() {
+  const pisos = PROJECT.pisos || [];
+  const rows = pisos.length ? pisos : (EDIT ? [{ nivel: '' }] : []);
+  if (!rows.length) return '<tr><td colspan="' + (ERP.SUP_FIELDS.length + 1) + '" class="muted">Sin niveles registrados.</td></tr>';
+  return rows.map(p => pisoRow(p)).join('');
+}
+
+function pisoRow(p) {
+  return '<tr class="piso-row">' +
+    '<td><input data-k="nivel" value="' + E(p.nivel == null ? '' : p.nivel) + '"' + dis() +
+      ' oninput="recalcSuperficies()" style="min-width:54px;font-weight:700"></td>' +
+    ERP.SUP_FIELDS.map(f => {
+      const v = p[f.k] == null ? '' : p[f.k];
+      return '<td><input data-k="' + f.k + '" inputmode="decimal" value="' + E(v) + '"' + dis() +
+        ' oninput="recalcSuperficies()"></td>';
+    }).join('') +
+    (EDIT ? '<td><button class="icon-btn" title="Eliminar nivel" onclick="delPiso(this)">✕</button></td>' : '') +
+    '</tr>';
+}
+
+function addPiso() {
+  document.getElementById('pisosBody').insertAdjacentHTML('beforeend', pisoRow({ nivel: '' }));
+}
+function delPiso(btn) { btn.closest('.piso-row').remove(); recalcSuperficies(); }
+
+function collectPisosFromDOM() {
+  return [...document.querySelectorAll('#pisosBody .piso-row')].map(r => {
+    const o = {};
+    r.querySelectorAll('[data-k]').forEach(inp => { o[inp.dataset.k] = inp.value.trim(); });
+    return o;
+  }).filter(o => o.nivel !== '' || ERP.SUP_FIELDS.some(f => o[f.k] && o[f.k] !== ''));
+}
+
+function recalcSuperficies() {
+  const box = document.getElementById('cuadrosBox');
+  if (!box) return;
+  const pisos = document.querySelector('#pisosBody') ? collectPisosFromDOM() : (PROJECT.pisos || []);
+  const res = ERPCalc.computeSurfaces(pisos);
+  const roles = cuadrosForRole(CURRENT_USER);
+  box.innerHTML = roles.map(t => renderCuadro(t, res)).join('');
+  renderVerif(res);
+}
+
+function renderCuadro(type, res) {
+  const m = CUADRO_META[type];
+  const cols = CUADRO_COLS[type];
+  const header = '<tr><th>Nivel</th>' + cols.map(c => '<th>' + E(c.l) + '</th>').join('') + '</tr>';
+  const body = res.levels.map(r => {
+    const data = r[type === 'construccion' ? 'constr' : (type === 'comercial' ? 'com' : 'muni')];
+    return '<tr><td>' + E(r.nivel) + '</td>' +
+      cols.map(c => '<td>' + cell(data[c.k]) + '</td>').join('') + '</tr>';
+  }).join('');
+  const tt = res.totals[type === 'construccion' ? 'constr' : (type === 'comercial' ? 'com' : 'muni')];
+  const totRow = '<tr class="tot"><td>TOTAL</td>' +
+    cols.map(c => '<td>' + cell(tt[c.k]) + '</td>').join('') + '</tr>';
+  return '<div style="margin-bottom:26px">' +
+    '<div class="cuadro-h"><span class="cuadro-tag" style="background:' + m.color + '">' + m.l + '</span></div>' +
+    '<div class="tbl-scroll"><table class="ctable"><thead>' + header + '</thead><tbody>' + body + totRow + '</tbody></table></div>' +
+    '</div>';
+}
+
+function cell(v) {
+  if (v == null || isNaN(v)) return '—';
+  const n = ERPCalc.r2(v);
+  return n === 0 ? '<span class="muted">0</span>' : ERP.fmtNum(n, 2);
+}
+
+const CUADRO_COLS = {
+  municipal: [
+    { k: 'X', l: 'Útil Deptos' }, { k: 'Y', l: 'Comercio' }, { k: 'Z', l: 'Bodegas' },
+    { k: 'AA', l: 'Est.' }, { k: 'AB', l: 'Uso Excl.' }, { k: 'AC', l: 'Uso Común' },
+    { k: 'AD', l: 'ÚTIL' }, { k: 'AE', l: 'COMÚN' }, { k: 'AF', l: 'TOTAL' }
+  ],
+  construccion: [
+    { k: 'AI', l: 'Int. Útil' }, { k: 'AJ', l: 'Int. Común' }, { k: 'AK', l: 'Int. Subte' },
+    { k: 'AL', l: 'Ext. Útil Terr.' }, { k: 'AM', l: 'Ext. Común Terr.' }, { k: 'AN', l: 'Cubiertas' },
+    { k: 'AO', l: 'TOTAL LOSA' }, { k: 'AP', l: 'Radier' }, { k: 'AQ', l: 'TOTAL CONSTR.' }
+  ],
+  comercial: [
+    { k: 'AT', l: 'Útil Int. Deptos' }, { k: 'AU', l: 'Terraza 50%' }, { k: 'AV', l: 'Jardín 25%' },
+    { k: 'AW', l: 'Útil Comercio' }, { k: 'AX', l: 'ÚTIL TOTAL' }, { k: 'AY', l: 'Bodegas' }, { k: 'AZ', l: 'Común' }
+  ]
+};
+
+// Resumen informativo de los totales clave de SUPxPISO.
+// La verificación cruzada formal (SUPxPISO ↔ SUPxPRO por producto)
+// se incorpora en la Fase 3b junto al cuadro "Superficies por producto".
+function renderVerif(res) {
+  const box = document.getElementById('verifBox');
+  if (!box) return;
+  const roles = cuadrosForRole(CURRENT_USER);
+  const parts = [];
+  if (roles.includes('municipal')) parts.push('Total Municipal ' + ERP.fmtNum(ERPCalc.r2(res.totals.muni.AF), 2) + ' m²');
+  if (roles.includes('construccion')) parts.push('Total Construido ' + ERP.fmtNum(ERPCalc.r2(res.totals.constr.AQ), 2) + ' m²');
+  if (roles.includes('comercial')) parts.push('Útil Comercial ' + ERP.fmtNum(ERPCalc.r2(res.totals.com.AX), 2) + ' m²');
+  if (!parts.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="verif ok">Σ ' + parts.join(' · ') + '</div>' +
+    '<div class="ro-note" style="margin-top:6px">La verificación cruzada con el cuadro por producto se incorpora en la Fase 3b.</div>';
+}
+
+async function savePisos() {
+  await doSave('savePisos', { pisos: collectPisosFromDOM() });
+}
 
 // ============================================================
 //  Guardado común

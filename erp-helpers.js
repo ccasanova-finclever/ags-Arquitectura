@@ -146,6 +146,29 @@ window.ERP = (function () {
     { k: 'altMaxProyectada',l: 'Altura Máxima Proyectada',     type: 'num' }
   ];
 
+  // ---- Campos de entrada por nivel (hoja SUPxPISO) -------------
+  // g = grupo de encabezado para la tabla.
+  const SUP_FIELDS = [
+    { k: 'depto',           l: 'Deptos',          g: 'N° Unidades' },
+    { k: 'bodega',          l: 'Bodegas',         g: 'N° Unidades' },
+    { k: 'local',           l: 'Locales',         g: 'N° Unidades' },
+    { k: 'estVend',         l: 'Est. Vend.',      g: 'N° Unidades' },
+    { k: 'estVis',          l: 'Est. Visitas',    g: 'N° Unidades' },
+    { k: 'perimClim',       l: 'Perím. Climat.',  g: 'Superficies (m²)' },
+    { k: 'poliComun',       l: 'Polilínea Común', g: 'Superficies (m²)' },
+    { k: 'vacioAsc',        l: 'Vacío Ascensor',  g: 'Vacíos (m²)' },
+    { k: 'vacioEsc',        l: 'Vacío Escalera',  g: 'Vacíos (m²)' },
+    { k: 'shaftComun',      l: 'Shaft Común',     g: 'Vacíos (m²)' },
+    { k: 'shaftInt',        l: 'Shaft Interior',  g: 'Vacíos (m²)' },
+    { k: 'terrConstr',      l: 'Terr. Constr.',   g: 'Terrazas (m²)' },
+    { k: 'terrAzotea',      l: 'Terr. Azotea',    g: 'Terrazas (m²)' },
+    { k: 'terrComunAzotea', l: 'Terr. Común Az.', g: 'Terrazas (m²)' },
+    { k: 'terrMunicipal',   l: 'Terr. Municipal', g: 'Terrazas (m²)' },
+    { k: 'otrasBodega',     l: 'Bodegas',         g: 'Otras Sup. (m²)' },
+    { k: 'otrasComercio',   l: 'Comercio',        g: 'Otras Sup. (m²)' },
+    { k: 'radierCubierta',  l: 'Radier/Cubierta', g: 'Otras Sup. (m²)' }
+  ];
+
   // Evalúa cumplimiento de un parámetro normativo.
   // Devuelve true / false / null (sin datos suficientes).
   function cumpleEval(op, proyectado, permitido) {
@@ -159,7 +182,7 @@ window.ERP = (function () {
 
   return {
     ROLE_ORDER, ROLE_META, STATUS_META, SEED_USERS, AUTH_DOMAIN,
-    TER_LOTE_FIELDS, NOR_PARAMS, ALT_FIELDS,
+    TER_LOTE_FIELDS, NOR_PARAMS, ALT_FIELDS, SUP_FIELDS,
     fmtNum, fmtM2, today, codePrefix, esc, parseNum, cumpleEval,
     roleLevel, canCreateProject, canEditProject, canManageUsers, canSeeComercial
   };

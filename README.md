@@ -33,6 +33,11 @@ la carpeta a Netlify Drop.
 - [x] **F1** Fundación: login, seed usuarios, grilla, creación de anteproyectos, rules.
 - [x] **F2** `proyecto.html`: tabs Terreno / Normativa / Alturas con persistencia Write-First.
       Normativa ya evalúa cumplimiento (proyectado vs. permitido) con semáforo en vivo.
-- [ ] **F3** `erp-calc.js`: motor de cálculo (cuadros Municipal/Construcción/Comercial, verificación cruzada; el proyectado de Normativa pasa a derivarse de las superficies).
+- [x] **F3** `erp-calc.js`: motor de cálculo de superficies por nivel → cuadros
+      Municipal / Construcción / Comercial con totales en vivo. Validado contra los
+      16 totales reales del Excel (`node erp-calc.test.js`). Pestaña Superficies con
+      tabla de entrada por nivel + cuadros según rol.
+- [ ] **F3b** Cuadro "Superficies por producto" (SUPxPRO) + verificación cruzada
+      SUPxPISO ↔ SUPxPRO + derivar el "proyectado" de Normativa desde las superficies.
 - [ ] **F4** Est/Ocp, Documentos (Storage), Bitácora, `admin.html`.
 - [ ] **F5** Visibilidad fina por rol dentro de la tarjeta + rules granulares.

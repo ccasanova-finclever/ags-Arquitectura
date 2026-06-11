@@ -8,7 +8,13 @@
       "Bash(which git *)",
       "Bash(ssh -T git@github.com -o StrictHostKeyChecking=accept-new -o BatchMode=yes)",
       "Bash(grep -iE '\\\\.\\(png|jpg|jpeg|svg|webp\\)$')",
-      "Bash(sips -g pixelWidth -g pixelHeight -g hasAlpha \"/Users/christiancasanovavera/Desktop/Arquitectura.png\" \"/Users/christiancasanovavera/Desktop/Logo AGS ARQ2.png\")"
+      "Bash(sips -g pixelWidth -g pixelHeight -g hasAlpha \"/Users/christiancasanovavera/Desktop/Arquitectura.png\" \"/Users/christiancasanovavera/Desktop/Logo AGS ARQ2.png\")",
+      "Bash(rm -f _harness.html erp-calc.test-data.js)",
+      "Bash(lsof -ti:8765)",
+      "Bash(xargs kill)",
+      "Bash(printf '\\\\n# Preview / harness temporales\\\\n_harness.html\\\\nerp-calc.test-data.js\\\\n')",
+      "Bash(node --check erp-calc.js)",
+      "Bash(node erp-calc.test.js)"
     ]
   }
 }
