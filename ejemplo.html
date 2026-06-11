@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#285B35">
+<title>ERP-ARQ · Proyecto de ejemplo</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="stylesheet" href="erp-theme.css">
+</head>
+<body>
+<div id="appView" style="display:none">
+  <div class="topbar">
+    <button class="btn ghost" style="padding:7px 12px" onclick="location.href='index.html'">← Volver</button>
+    <span class="logo">ERP-ARQ</span>
+    <span class="muted">Proyecto de ejemplo</span>
+    <span class="spacer"></span>
+    <span id="userChip" class="chip" style="background:var(--brand-soft);color:var(--brand)"></span>
+  </div>
+  <div class="wrap">
+    <div class="card" style="max-width:640px;margin:0 auto">
+      <h2 style="margin-bottom:8px">Cargar proyecto de ejemplo</h2>
+      <p class="muted" style="margin-bottom:14px">
+        Crea el anteproyecto <strong>Edificio José Pedro Alessandri 1880</strong> (Ñuñoa) con todos
+        los datos reales del Excel base: terreno, normativa, alturas, superficies por nivel y por
+        producto, estacionamientos y carga de ocupación. Sirve como ejemplo completo del sistema.
+      </p>
+      <ul class="muted" style="font-size:13px;line-height:1.7;margin-bottom:18px">
+        <li>Código: <strong>2601NUN</strong> (puedes editarlo luego según tu convención)</li>
+        <li>14 niveles · 230 viviendas · 5 locales</li>
+        <li>Si ya existe, se actualiza (no se duplica)</li>
+      </ul>
+      <div class="save-bar" style="display:flex;gap:14px;align-items:center">
+        <button class="btn" id="btnSeed" onclick="seedExample()">Crear / actualizar ejemplo</button>
+        <span id="seedMsg" class="muted"></span>
+      </div>
+      <div id="seedDone" style="display:none;margin-top:18px">
+        <a id="openLink" class="btn soft" href="#">Abrir el proyecto →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="denyView" style="display:none">
+  <div class="login-wrap"><div class="card login-card" style="text-align:center">
+    <div class="logo">ERP-ARQ</div>
+    <p class="muted" style="margin:16px 0">Necesitas rol Arquitecto o superior para crear proyectos.</p>
+    <button class="btn" onclick="location.href='index.html'">Volver</button>
+  </div></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="erp-helpers.js"></script>
+<script src="ejemplo-data.js"></script>
+<script>
+let CURRENT_USER = null;
+
+fbAuth.onAuthStateChanged(async (u) => {
+  if (!u || !(u.email || '').toLowerCase().endsWith(ERP.AUTH_DOMAIN)) { location.href = 'index.html'; return; }
+  const snap = await db.collection('users').doc(u.email.toLowerCase()).get();
+  CURRENT_USER = snap.exists ? snap.data() : { email: u.email, name: u.email, role: 'lectura' };
+  if (!ERP.canCreateProject(CURRENT_USER)) { document.getElementById('denyView').style.display = 'block'; return; }
+  document.getElementById('appView').style.display = 'block';
+  const m = ERP.ROLE_META[CURRENT_USER.role];
+  document.getElementById('userChip').textContent = CURRENT_USER.name + ' · ' + m.l;
+});
+
+async function seedExample() {
+  const btn = document.getElementById('btnSeed');
+  const msg = document.getElementById('seedMsg');
+  btn.disabled = true;
+  msg.style.color = ''; msg.textContent = 'Creando…';
+  const p = Object.assign({}, window.EJEMPLO_PROJECT, { createdBy: CURRENT_USER.email });
+  try {
+    await db.collection('projects').doc(p.id).set(p);
+    await db.collection('projects').doc(p.id).collection('activity').add({
+      action: 'Cargó el proyecto de ejemplo',
+      detail: 'Datos del Excel base AAMMDD-01-BASE-AP',
+      user: CURRENT_USER.name || CURRENT_USER.email, email: CURRENT_USER.email,
+      at: new Date().toISOString(), atMs: Date.now()
+    });
+    msg.style.color = '#16A34A'; msg.textContent = '✓ Listo';
+    const link = document.getElementById('openLink');
+    link.href = 'proyecto.html?id=' + encodeURIComponent(p.id);
+    document.getElementById('seedDone').style.display = 'block';
+  } catch (e) {
+    msg.style.color = '#DC2626'; msg.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

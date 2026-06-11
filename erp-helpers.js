@@ -57,11 +57,18 @@ window.ERP = (function () {
 
   function today() { return new Date().toISOString().slice(0, 10); }
 
-  // Código por convención de la unidad: AAMMDD (fecha) + correlativo
-  function codePrefix() {
-    const d = new Date();
-    const p = x => String(x).padStart(2, '0');
-    return String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate());
+  // Convención de código de la unidad: AANN + LLL
+  //   AA  = últimos 2 dígitos del año en que el proyecto entró al servidor
+  //   NN  = número correlativo de orden de entrada de proyectos ese año
+  //   LLL = código de 3 letras de la ubicación física del terreno
+  // Ejemplo: 2220UTE (año 2022, proyecto N°20, ubicación UTE).
+  function yy() { return String(new Date().getFullYear()).slice(2); }
+
+  function buildCode(year, num, loc) {
+    const a = String(year || '').replace(/\D/g, '').slice(0, 2).padStart(2, '0');
+    const n = String(num || '').replace(/\D/g, '').padStart(2, '0');
+    const l = String(loc || '').toUpperCase().replace(/[^A-ZÑ]/g, '').slice(0, 3);
+    return a + n + l;
   }
 
   function esc(s) {
@@ -183,7 +190,7 @@ window.ERP = (function () {
   return {
     ROLE_ORDER, ROLE_META, STATUS_META, SEED_USERS, AUTH_DOMAIN,
     TER_LOTE_FIELDS, NOR_PARAMS, ALT_FIELDS, SUP_FIELDS,
-    fmtNum, fmtM2, today, codePrefix, esc, parseNum, cumpleEval,
+    fmtNum, fmtM2, today, yy, buildCode, esc, parseNum, cumpleEval,
     roleLevel, canCreateProject, canEditProject, canManageUsers, canSeeComercial
   };
 })();

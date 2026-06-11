@@ -79,10 +79,21 @@
       <h3>Nuevo Anteproyecto</h3>
       <button class="m-x" onclick="closeNewModal()">✕</button>
     </div>
-    <div class="fi">
-      <label>Código (convención AAMMDD-NN)</label>
-      <input id="npCode" type="text" placeholder="260610-01">
+    <div class="g3" style="gap:10px">
+      <div class="fi">
+        <label>Año (AA)</label>
+        <input id="npYear" type="text" inputmode="numeric" maxlength="2" placeholder="26" oninput="updateCodePreview()">
+      </div>
+      <div class="fi">
+        <label>N° correlativo</label>
+        <input id="npNum" type="text" inputmode="numeric" placeholder="20" oninput="updateCodePreview()">
+      </div>
+      <div class="fi">
+        <label>Ubicación (3 letras)</label>
+        <input id="npLoc" type="text" maxlength="3" placeholder="UTE" oninput="updateCodePreview()" style="text-transform:uppercase">
+      </div>
     </div>
+    <div class="muted" style="margin:-6px 0 14px">Código del proyecto: <strong id="npPreview" style="color:var(--brand);font-size:16px">——————</strong></div>
     <div class="fi">
       <label>Nombre del proyecto</label>
       <input id="npName" type="text" placeholder="Ej: Edificio José Pedro Alessandri 1880">
@@ -271,21 +282,37 @@ function openProject(id) { location.href = 'proyecto.html?id=' + encodeURICompon
 
 // ---------- Crear anteproyecto (Write-First con rollback) ----------
 function openNewModal() {
-  document.getElementById('npCode').value = ERP.codePrefix() + '-';
+  document.getElementById('npYear').value = ERP.yy();
+  document.getElementById('npNum').value = '';
+  document.getElementById('npLoc').value = '';
   document.getElementById('npName').value = '';
   document.getElementById('npComuna').value = '';
   document.getElementById('npErr').textContent = '';
+  updateCodePreview();
   document.getElementById('newOv').classList.add('open');
 }
 function closeNewModal() { document.getElementById('newOv').classList.remove('open'); }
 
+function currentCode() {
+  return ERP.buildCode(
+    document.getElementById('npYear').value,
+    document.getElementById('npNum').value,
+    document.getElementById('npLoc').value
+  );
+}
+function updateCodePreview() {
+  const code = currentCode();
+  document.getElementById('npPreview').textContent = code || '——————';
+}
+
 async function createProject() {
-  const code = document.getElementById('npCode').value.trim();
+  const code = currentCode();
   const name = document.getElementById('npName').value.trim();
   const comuna = document.getElementById('npComuna').value.trim();
   const err = document.getElementById('npErr');
   err.textContent = '';
-  if (!code || !name) { err.textContent = 'Código y nombre son obligatorios.'; return; }
+  if (!name) { err.textContent = 'El nombre es obligatorio.'; return; }
+  if (code.length < 7) { err.textContent = 'Completa año (2 dígitos), correlativo y ubicación (3 letras).'; return; }
 
   const id = String(Date.now());
   const proj = {
