@@ -446,6 +446,8 @@ function tabNormativa() {
   return '' + roNote() +
     '<div class="sec">' +
       '<div class="sec-title">Cumplimiento de condiciones urbanísticas</div>' +
+      (EDIT ? '<div class="ro-note">El proyectado de N° de viviendas y superficie de constructibilidad puede traerse de las Superficies. ' +
+        '<button class="btn soft" style="padding:5px 12px;margin-left:6px" onclick="derivarNormativa()">↻ Traer desde Superficies</button></div>' : '') +
       '<div class="tbl-scroll"><table class="dtable"><thead><tr>' +
         '<th>Parámetro</th><th>Proyectado</th><th>Permitido</th><th>Cumple</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
@@ -498,6 +500,28 @@ function collectNormativa() {
 }
 
 async function saveNormativa() { await doSave('saveNormativa', collectNormativa()); }
+
+// Deriva el "proyectado" de los parámetros calculables desde las superficies.
+function derivarNormativa() {
+  const res = ERPCalc.computeSurfaces(PROJECT.pisos || []);
+  const viviendas = (PROJECT.pisos || []).reduce((s, p) => s + (ERP.parseNum(p.depto) || 0), 0);
+  const utilSobreSuelo = res.levels.reduce((s, l) => {
+    const n = parseFloat(l.nivel);
+    return s + ((!isNaN(n) && n > 0) ? l.muni.AD : 0);
+  }, 0);
+  const set = (key, val) => {
+    const tr = document.querySelector('.nor-row[data-key="' + key + '"]');
+    if (!tr) return;
+    const inp = tr.querySelector('[data-k="proyectado"]');
+    inp.value = ERPCalc.r2(val);
+    recalcNor(inp);
+  };
+  if (viviendas) set('cantViviendas', viviendas);
+  if (utilSobreSuelo) set('supConstr', ERPCalc.r2(utilSobreSuelo));
+  if (!viviendas && !utilSobreSuelo) {
+    alert('Aún no hay datos de superficies por nivel. Complétalos primero en la pestaña Superficies.');
+  }
+}
 
 // ============================================================
 //  ALTURAS
@@ -575,8 +599,51 @@ function tabSuperficies() {
     '<div class="sec"><div class="sec-title">Cuadros calculados</div>' +
       '<div id="cuadrosBox"></div>' +
       '<div id="verifBox"></div>' +
+    '</div>' +
+    '<div class="sec"><div class="sec-title">Superficies por producto</div>' +
+      '<div class="ro-note">Tipologías y unidades. La superficie útil total se contrasta con el cuadro por piso (verificación cruzada).</div>' +
+      '<div class="tbl-scroll"><table class="dtable"><thead><tr>' +
+        '<th>Producto</th><th>Programa</th><th>Sup. útil/unidad (m²)</th><th>N° unidades</th><th>Sup. útil total (m²)</th>' +
+        (EDIT ? '<th></th>' : '') +
+      '</tr></thead><tbody id="prodBody">' + renderProdRows() + '</tbody></table></div>' +
+      (EDIT ? '<div class="row-actions"><button class="btn soft" onclick="addProd()">+ Agregar producto</button></div>' : '') +
+      '<div id="prodResult" style="margin-top:12px"></div>' +
+      (EDIT ? '<div class="save-bar"><button class="btn" id="btn-saveProd" onclick="saveProd()">Guardar productos</button>' +
+        '<span id="msg-saveProd" class="save-msg"></span></div>' : '') +
     '</div>';
 }
+
+function renderProdRows() {
+  const prods = PROJECT.productos || [];
+  const base = prods.length ? prods : (EDIT ? [{}] : []);
+  if (!base.length) return '<tr><td colspan="5" class="muted">Sin productos registrados.</td></tr>';
+  return base.map(p => prodRow(p)).join('');
+}
+
+function prodRow(p) {
+  const util = (ERP.parseNum(p.utilUnidad) || 0) * (ERP.parseNum(p.nUnidades) || 0);
+  return '<tr class="prod-row">' +
+    '<td><input data-k="producto" value="' + E(p.producto || '') + '"' + dis() + ' style="min-width:90px"></td>' +
+    '<td><input data-k="programa" value="' + E(p.programa || '') + '"' + dis() + ' style="min-width:80px"></td>' +
+    '<td><input data-k="utilUnidad" inputmode="decimal" value="' + E(p.utilUnidad == null ? '' : p.utilUnidad) + '"' + dis() + ' oninput="recalcSuperficies()"></td>' +
+    '<td><input data-k="nUnidades" inputmode="decimal" value="' + E(p.nUnidades == null ? '' : p.nUnidades) + '"' + dis() + ' oninput="recalcSuperficies()"></td>' +
+    '<td class="prod-util" style="font-weight:700">' + (util ? ERP.fmtNum(util, 2) : '—') + '</td>' +
+    (EDIT ? '<td><button class="icon-btn" title="Eliminar" onclick="delProd(this)">✕</button></td>' : '') +
+    '</tr>';
+}
+
+function addProd() { document.getElementById('prodBody').insertAdjacentHTML('beforeend', prodRow({})); }
+function delProd(btn) { btn.closest('.prod-row').remove(); recalcSuperficies(); }
+
+function collectProd() {
+  return [...document.querySelectorAll('#prodBody .prod-row')].map(r => {
+    const o = {};
+    r.querySelectorAll('[data-k]').forEach(i => { o[i.dataset.k] = i.value.trim(); });
+    return o;
+  }).filter(o => o.producto || o.utilUnidad || o.nUnidades);
+}
+
+async function saveProd() { await doSave('saveProd', { productos: collectProd() }); }
 
 function renderPisoRows() {
   const pisos = PROJECT.pisos || [];
@@ -619,6 +686,35 @@ function recalcSuperficies() {
   const roles = cuadrosForRole(CURRENT_USER);
   box.innerHTML = roles.map(t => renderCuadro(t, res)).join('');
   renderVerif(res);
+  recalcProductos(res);
+}
+
+// Superficies por producto + verificación cruzada con SUPxPISO.
+function recalcProductos(res) {
+  const result = document.getElementById('prodResult');
+  if (!result) return;
+  // Actualizar útil por fila en vivo
+  let utilProd = 0;
+  document.querySelectorAll('#prodBody .prod-row').forEach(r => {
+    const u = (ERP.parseNum(r.querySelector('[data-k="utilUnidad"]').value) || 0) *
+              (ERP.parseNum(r.querySelector('[data-k="nUnidades"]').value) || 0);
+    const cell = r.querySelector('.prod-util');
+    if (cell) cell.textContent = u ? ERP.fmtNum(u, 2) : '—';
+    utilProd += u;
+  });
+  // Útil sobre suelo (SUPxPISO): suma de AD municipal para niveles sobre NNT (nivel > 0)
+  const utilPiso = res.levels.reduce((s, l) => {
+    const n = parseFloat(l.nivel);
+    return s + ((!isNaN(n) && n > 0) ? l.muni.AD : 0);
+  }, 0);
+  const dif = ERPCalc.r2(utilProd - utilPiso);
+  const ok = Math.abs(dif) <= 1; // tolerancia 1 m²
+  const hasProd = document.querySelectorAll('#prodBody .prod-row').length > 0 && utilProd > 0;
+  result.innerHTML = !hasProd ? '' :
+    '<div class="verif ' + (ok ? 'ok' : 'warn') + '">' +
+    (ok ? '✓ Verificación cruzada OK' : '⚠️ Diferencia entre cuadros') +
+    ' · Útil por producto ' + ERP.fmtNum(utilProd, 2) + ' m² vs Útil sobre suelo (por piso) ' +
+    ERP.fmtNum(ERPCalc.r2(utilPiso), 2) + ' m² · Δ ' + ERP.fmtNum(dif, 2) + ' m²</div>';
 }
 
 function renderCuadro(type, res) {
@@ -662,9 +758,9 @@ const CUADRO_COLS = {
   ]
 };
 
-// Resumen informativo de los totales clave de SUPxPISO.
-// La verificación cruzada formal (SUPxPISO ↔ SUPxPRO por producto)
-// se incorpora en la Fase 3b junto al cuadro "Superficies por producto".
+// Resumen informativo de los totales clave de SUPxPISO. La verificación
+// cruzada formal (SUPxPISO ↔ por producto) se muestra en la sección
+// "Superficies por producto" más abajo.
 function renderVerif(res) {
   const box = document.getElementById('verifBox');
   if (!box) return;
@@ -955,6 +1051,7 @@ const ACTION_LABELS = {
   saveNormativa: 'Actualizó Normativa',
   saveAlturas: 'Actualizó Alturas',
   savePisos: 'Actualizó Superficies',
+  saveProd: 'Actualizó Superficies por producto',
   saveEstOcp: 'Actualizó Estacionamientos / Ocupación'
 };
 
