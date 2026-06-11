@@ -87,6 +87,13 @@
   .verif { padding:10px 14px; border-radius:10px; font-size:13px; font-weight:600; margin-top:12px; }
   .verif.ok { background:#DCFCE7; color:#166534; }
   .verif.warn { background:#FEE2E2; color:#991B1B; }
+
+  /* Bitácora */
+  .act-feed { display:flex; flex-direction:column; gap:2px; }
+  .act-item { display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); }
+  .act-dot { width:9px; height:9px; border-radius:50%; background:var(--brand); margin-top:5px; flex:none; }
+  .act-action { font-size:14px; font-weight:600; }
+  .act-meta { font-size:12px; color:var(--ink-soft); margin-top:2px; }
 </style>
 </head>
 <body>
@@ -116,6 +123,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script src="firebase-init.js"></script>
 <script src="erp-helpers.js"></script>
 <script src="erp-calc.js"></script>
@@ -224,9 +232,9 @@ function renderTab(k) {
   else if (k === 'normativa') c.innerHTML = tabNormativa();
   else if (k === 'alturas') c.innerHTML = tabAlturas();
   else if (k === 'superficies') { c.innerHTML = tabSuperficies(); recalcSuperficies(); }
-  else if (k === 'estocp') c.innerHTML = tabPlaceholder('Estacionamientos y Carga de Ocupación', 'Fase 4');
-  else if (k === 'documentos') c.innerHTML = tabPlaceholder('Documentos del proyecto', 'Fase 4 — almacenamiento en Firebase Storage');
-  else if (k === 'bitacora') c.innerHTML = tabPlaceholder('Bitácora de cambios', 'Fase 4');
+  else if (k === 'estocp') { c.innerHTML = tabEstOcp(); recalcEstOcp(); }
+  else if (k === 'documentos') { c.innerHTML = tabDocumentos(); loadDocs(); }
+  else if (k === 'bitacora') { c.innerHTML = tabBitacora(); loadActivity(); }
 }
 
 function tabPlaceholder(title, fase) {
@@ -303,6 +311,7 @@ async function saveStatus() {
   msg.className = 'save-msg'; msg.textContent = 'Guardando…';
   try {
     await saveSection({ status: v });
+    logActivity('Cambió estado a ' + ((ERP.STATUS_META[v] || {}).l || v));
     renderHeader();
     msg.className = 'save-msg ok'; msg.textContent = '✓ Estado actualizado';
   } catch (e) {
@@ -674,6 +683,265 @@ async function savePisos() {
 }
 
 // ============================================================
+//  ESTACIONAMIENTOS / OCUPACIÓN (motor erp-calc)
+// ============================================================
+const EST_FIELDS = [
+  { k: 'cantViviendas',     l: 'N° Viviendas < 100 m²' },
+  { k: 'factorVisitas',     l: 'Factor visitas (×)' },
+  { k: 'superficieComercio',l: 'Superficie comercio (m²)' },
+  { k: 'm2PorEstComercio',  l: 'm² por est. comercio' },
+  { k: 'estPorBici',        l: 'Est. veh. por bici' },
+  { k: 'factorBiciVisitas', l: 'Factor bici visitas (×)' }
+];
+const OCP_COLS = [
+  { k: 'est',      l: 'Est. (m²)' },
+  { k: 'bodega',   l: 'Bodega (m²)' },
+  { k: 'comercio', l: 'Comercio (m²)' },
+  { k: 'd60',      l: 'Depto < 60' },
+  { k: 'd140',     l: 'Depto 60-140' },
+  { k: 'dmas',     l: 'Depto > 140' }
+];
+const OCP_DIV_FIELDS = [
+  { k: 'est', l: 'Est.' }, { k: 'bodega', l: 'Bodega' }, { k: 'comercio', l: 'Comercio' },
+  { k: 'd60', l: 'Depto<60' }, { k: 'd140', l: 'Depto 60-140' }, { k: 'dmas', l: 'Depto>140' }
+];
+
+// Valores iniciales derivados del proyecto si no hay datos guardados.
+function estDefaults() {
+  const saved = (PROJECT.estocp && PROJECT.estocp.est) || {};
+  const def = Object.assign({}, ERPCalc.EST_DEFAULTS, saved);
+  if (saved.cantViviendas == null || saved.cantViviendas === '') {
+    const deptos = (PROJECT.pisos || []).reduce((s, p) => s + (ERP.parseNum(p.depto) || 0), 0);
+    if (deptos) def.cantViviendas = deptos;
+  }
+  return def;
+}
+
+function tabEstOcp() {
+  const est = estDefaults();
+  const div = Object.assign({}, ERPCalc.OCP_DIV, (PROJECT.estocp && PROJECT.estocp.div) || {});
+
+  const estInputs = EST_FIELDS.map(f =>
+    '<div class="fi"><label>' + E(f.l) + '</label>' +
+    '<input data-est="' + f.k + '" inputmode="decimal" value="' + E(est[f.k] == null ? '' : est[f.k]) + '"' + dis() +
+    ' oninput="recalcEstOcp()"></div>').join('');
+
+  const divInputs = OCP_DIV_FIELDS.map(f =>
+    '<div class="fi"><label>' + E(f.l) + '</label>' +
+    '<input data-div="' + f.k + '" inputmode="decimal" value="' + E(div[f.k]) + '"' + dis() +
+    ' oninput="recalcEstOcp()" style="max-width:90px"></div>').join('');
+
+  return '' + roNote() +
+    '<div class="sec">' +
+      '<div class="sec-title">Dotación de estacionamientos</div>' +
+      '<div class="fgrid">' + estInputs + '</div>' +
+      '<div id="estResult" style="margin-top:16px"></div>' +
+    '</div>' +
+    '<div class="sec">' +
+      '<div class="sec-title">Carga de ocupación por nivel</div>' +
+      '<div class="ro-note">Superficie por destino en cada nivel. La carga se calcula por los divisores HAB/m² (Art. 4.2.4 OGUC).</div>' +
+      '<div class="tbl-scroll"><table class="dtable"><thead><tr><th>Nivel</th>' +
+        OCP_COLS.map(c => '<th>' + E(c.l) + '</th>').join('') + '<th>Carga</th>' + (EDIT ? '<th></th>' : '') +
+      '</tr></thead><tbody id="ocpBody">' + renderOcpRows() + '</tbody></table></div>' +
+      (EDIT ? '<div class="row-actions"><button class="btn soft" onclick="addOcp()">+ Agregar nivel</button></div>' : '') +
+      '<div id="ocpResult" style="margin-top:12px"></div>' +
+      '<details style="margin-top:14px"><summary class="muted" style="cursor:pointer;font-size:13px">Divisores HAB/m² (avanzado)</summary>' +
+        '<div class="fgrid" style="margin-top:10px">' + divInputs + '</div></details>' +
+    '</div>' +
+    (EDIT ? '<div class="save-bar"><button class="btn" id="btn-saveEstOcp" onclick="saveEstOcp()">Guardar estacionamientos / ocupación</button>' +
+      '<span id="msg-saveEstOcp" class="save-msg"></span></div>' : '');
+}
+
+function renderOcpRows() {
+  const rows = (PROJECT.estocp && PROJECT.estocp.ocp) || [];
+  const base = rows.length ? rows : (EDIT ? [{ nivel: '' }] : []);
+  if (!base.length) return '<tr><td colspan="' + (OCP_COLS.length + 2) + '" class="muted">Sin niveles.</td></tr>';
+  return base.map(r => ocpRow(r)).join('');
+}
+
+function ocpRow(r) {
+  return '<tr class="ocp-row">' +
+    '<td><input data-k="nivel" value="' + E(r.nivel == null ? '' : r.nivel) + '"' + dis() +
+      ' oninput="recalcEstOcp()" style="min-width:54px;font-weight:700"></td>' +
+    OCP_COLS.map(c => '<td><input data-k="' + c.k + '" inputmode="decimal" value="' + E(r[c.k] == null ? '' : r[c.k]) + '"' + dis() +
+      ' oninput="recalcEstOcp()"></td>').join('') +
+    '<td class="ocp-carga" style="font-weight:700">—</td>' +
+    (EDIT ? '<td><button class="icon-btn" title="Eliminar" onclick="delOcp(this)">✕</button></td>' : '') +
+    '</tr>';
+}
+
+function addOcp() { document.getElementById('ocpBody').insertAdjacentHTML('beforeend', ocpRow({ nivel: '' })); }
+function delOcp(btn) { btn.closest('.ocp-row').remove(); recalcEstOcp(); }
+
+function collectEst() {
+  const o = {};
+  document.querySelectorAll('[data-est]').forEach(i => { o[i.dataset.est] = i.value.trim(); });
+  return o;
+}
+function collectDiv() {
+  const o = {};
+  document.querySelectorAll('[data-div]').forEach(i => { o[i.dataset.div] = ERP.parseNum(i.value) || ERPCalc.OCP_DIV[i.dataset.div]; });
+  return o;
+}
+function collectOcp() {
+  return [...document.querySelectorAll('#ocpBody .ocp-row')].map(r => {
+    const o = {};
+    r.querySelectorAll('[data-k]').forEach(i => { o[i.dataset.k] = i.value.trim(); });
+    return o;
+  }).filter(o => o.nivel !== '' || OCP_COLS.some(c => o[c.k] && o[c.k] !== ''));
+}
+
+function recalcEstOcp() {
+  const estBox = document.getElementById('estResult');
+  if (!estBox) return;
+  const est = ERPCalc.computeEstacionamientos(collectEst());
+  estBox.innerHTML =
+    '<div class="kpis">' +
+      kpi('Vendibles vivienda', ERP.fmtNum(est.vendiblesVivienda), '1 est/viv') +
+      kpi('Visitas', ERP.fmtNum(est.visitas), '') +
+      kpi('Comercio', ERP.fmtNum(est.comercio), '') +
+      kpi('TOTAL vehículos', ERP.fmtNum(est.totalVehiculos), 'exigidos') +
+      kpi('Bicicletas', ERP.fmtNum(est.totalBicicletas), est.biciBase + ' + ' + est.biciVisitas + ' visitas') +
+    '</div>';
+
+  // OCP
+  const div = collectDiv();
+  const rows = collectOcp();
+  const ocp = ERPCalc.computeOcupacion(rows, div);
+  document.querySelectorAll('#ocpBody .ocp-row').forEach((tr, i) => {
+    const cell = tr.querySelector('.ocp-carga');
+    if (cell && ocp.levels[i]) cell.textContent = ERP.fmtNum(ocp.levels[i].carga);
+  });
+  const ocpBox = document.getElementById('ocpResult');
+  if (ocpBox) ocpBox.innerHTML = '<div class="verif ok">Población total de la edificación: ' + ERP.fmtNum(ocp.total) + ' personas</div>';
+}
+
+async function saveEstOcp() {
+  const estocp = { est: collectEst(), div: collectDiv(), ocp: collectOcp() };
+  await doSave('saveEstOcp', { estocp });
+}
+
+// ============================================================
+//  BITÁCORA
+// ============================================================
+function tabBitacora() {
+  return '<div class="sec"><div class="sec-title">Historial de cambios</div>' +
+    '<div id="actList"><div class="muted">Cargando…</div></div></div>';
+}
+
+async function loadActivity() {
+  const box = document.getElementById('actList');
+  if (!box) return;
+  try {
+    const snap = await db.collection('projects').doc(PID).collection('activity')
+      .orderBy('atMs', 'desc').limit(200).get();
+    if (snap.empty) { box.innerHTML = '<div class="empty">Aún no hay actividad registrada.</div>'; return; }
+    box.innerHTML = '<div class="act-feed">' + snap.docs.map(d => {
+      const a = d.data();
+      return '<div class="act-item"><div class="act-dot"></div><div>' +
+        '<div class="act-action">' + E(a.action) + (a.detail ? ' · ' + E(a.detail) : '') + '</div>' +
+        '<div class="act-meta">' + E(a.user || a.email) + ' · ' + fmtDateTime(a.at) + '</div>' +
+      '</div></div>';
+    }).join('') + '</div>';
+  } catch (e) {
+    box.innerHTML = '<div class="verif warn">No se pudo cargar la bitácora: ' + E(e.message) + '</div>';
+  }
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return iso; }
+}
+
+// ============================================================
+//  DOCUMENTOS (Firebase Storage)
+// ============================================================
+function tabDocumentos() {
+  return '' +
+    '<div class="sec"><div class="sec-title">Documentos del anteproyecto</div>' +
+      '<div class="ro-note">Planos, CIP, certificados, EETT, ingresos DOM y cualquier archivo del proyecto.</div>' +
+      (EDIT
+        ? '<div class="save-bar"><input type="file" id="docFile" style="font-size:14px">' +
+          '<button class="btn" id="btnUpload" onclick="uploadDoc()">Subir archivo</button>' +
+          '<span id="docMsg" class="save-msg"></span></div>'
+        : '') +
+      '<div id="docsList" style="margin-top:16px"><div class="muted">Cargando…</div></div>' +
+    '</div>';
+}
+
+async function loadDocs() {
+  const box = document.getElementById('docsList');
+  if (!box) return;
+  try {
+    const snap = await db.collection('projects').doc(PID).collection('documents')
+      .orderBy('atMs', 'desc').get();
+    if (snap.empty) { box.innerHTML = '<div class="empty">Sin documentos. ' + (EDIT ? 'Sube el primero.' : '') + '</div>'; return; }
+    box.innerHTML = '<table class="utable" style="width:100%"><tbody>' + snap.docs.map(d => {
+      const f = d.data();
+      return '<tr>' +
+        '<td>📄 <a href="' + E(f.url) + '" target="_blank" rel="noopener">' + E(f.name) + '</a>' +
+          '<div class="u-email">' + fmtSize(f.size) + ' · ' + E(f.by || '') + ' · ' + fmtDateTime(f.at) + '</div></td>' +
+        (EDIT ? '<td style="text-align:right"><button class="icon-btn" title="Eliminar" onclick="delDoc(\'' + d.id + '\',\'' + E(f.path) + '\')">✕</button></td>' : '') +
+      '</tr>';
+    }).join('') + '</tbody></table>';
+  } catch (e) {
+    box.innerHTML = '<div class="verif warn">No se pudieron cargar los documentos: ' + E(e.message) + '</div>';
+  }
+}
+
+function fmtSize(b) {
+  if (!b) return '—';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+
+async function uploadDoc() {
+  const input = document.getElementById('docFile');
+  const msg = document.getElementById('docMsg');
+  const btn = document.getElementById('btnUpload');
+  if (!input.files || !input.files[0]) { msg.className = 'save-msg err'; msg.textContent = 'Selecciona un archivo.'; return; }
+  if (!fbStorage) { msg.className = 'save-msg err'; msg.textContent = 'Storage no disponible.'; return; }
+  const file = input.files[0];
+  if (file.size > 25 * 1048576) { msg.className = 'save-msg err'; msg.textContent = 'Máximo 25 MB por archivo.'; return; }
+  btn.disabled = true;
+  msg.className = 'save-msg'; msg.textContent = 'Subiendo…';
+  const path = 'projects/' + PID + '/' + Date.now() + '_' + file.name.replace(/[^\w.\-]/g, '_');
+  try {
+    const ref = fbStorage.ref(path);
+    await ref.put(file);
+    const url = await ref.getDownloadURL();
+    await db.collection('projects').doc(PID).collection('documents').add({
+      name: file.name, size: file.size, type: file.type || '', path, url,
+      by: CURRENT_USER.name || CURRENT_USER.email, at: new Date().toISOString(), atMs: Date.now()
+    });
+    logActivity('Subió documento', file.name);
+    input.value = '';
+    msg.className = 'save-msg ok'; msg.textContent = '✓ Subido';
+    loadDocs();
+  } catch (e) {
+    msg.className = 'save-msg err'; msg.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function delDoc(docId, path) {
+  if (!confirm('¿Eliminar este documento? Esta acción no se puede deshacer.')) return;
+  try {
+    if (fbStorage && path) { try { await fbStorage.ref(path).delete(); } catch (e) {} }
+    await db.collection('projects').doc(PID).collection('documents').doc(docId).delete();
+    logActivity('Eliminó documento');
+    loadDocs();
+  } catch (e) {
+    alert('Error al eliminar: ' + e.message);
+  }
+}
+
+// ============================================================
 //  Guardado común
 // ============================================================
 function saveBar(fn) {
@@ -682,6 +950,14 @@ function saveBar(fn) {
     '<span id="msg-' + fn + '" class="save-msg"></span></div>';
 }
 
+const ACTION_LABELS = {
+  saveTerreno: 'Actualizó Terreno',
+  saveNormativa: 'Actualizó Normativa',
+  saveAlturas: 'Actualizó Alturas',
+  savePisos: 'Actualizó Superficies',
+  saveEstOcp: 'Actualizó Estacionamientos / Ocupación'
+};
+
 async function doSave(fn, patch) {
   const btn = document.getElementById('btn-' + fn);
   const msg = document.getElementById('msg-' + fn);
@@ -689,12 +965,26 @@ async function doSave(fn, patch) {
   if (msg) { msg.className = 'save-msg'; msg.textContent = 'Guardando…'; }
   try {
     await saveSection(patch);
+    logActivity(ACTION_LABELS[fn] || 'Guardó cambios');
     if (msg) { msg.className = 'save-msg ok'; msg.textContent = '✓ Guardado'; }
   } catch (e) {
     if (msg) { msg.className = 'save-msg err'; msg.textContent = 'Error: ' + e.message; }
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+// ---------- Bitácora (subcolección activity) ----------
+function logActivity(action, detail) {
+  // No bloquea el flujo: si falla el log, no rompe el guardado.
+  db.collection('projects').doc(PID).collection('activity').add({
+    action: action,
+    detail: detail || '',
+    user: CURRENT_USER.name || CURRENT_USER.email,
+    email: CURRENT_USER.email,
+    at: new Date().toISOString(),
+    atMs: Date.now()
+  }).catch(() => {});
 }
 </script>
 </body>

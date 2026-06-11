@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ERP-ARQ">
+<meta name="theme-color" content="#285B35">
+<title>ERP-ARQ · Administración</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="stylesheet" href="erp-theme.css">
+<style>
+  .utable { width:100%; border-collapse:collapse; font-size:14px; }
+  .utable th { text-align:left; font-size:11.5px; font-weight:700; color:var(--ink-soft); padding:8px 10px; border-bottom:1px solid var(--line); }
+  .utable td { padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  .utable select { border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:15px; background:#fff; }
+  .u-name { font-weight:600; }
+  .u-email { font-size:12.5px; color:var(--ink-soft); }
+  .badge-on { color:#16A34A; font-weight:700; }
+  .badge-off { color:var(--ink-soft); }
+  .save-msg { font-size:12px; margin-left:8px; }
+  .save-msg.ok { color:#16A34A; }
+  .save-msg.err { color:#DC2626; }
+</style>
+</head>
+<body>
+<div id="appView" style="display:none">
+  <div class="topbar">
+    <button class="btn ghost" style="padding:7px 12px" onclick="location.href='index.html'">← Volver</button>
+    <span class="logo">ERP-ARQ</span>
+    <span class="muted">Administración</span>
+    <span class="spacer"></span>
+    <span id="userChip" class="chip" style="background:var(--brand-soft);color:var(--brand)"></span>
+  </div>
+  <div class="wrap">
+    <div class="card">
+      <h2 style="margin-bottom:6px">Usuarios y roles</h2>
+      <div class="muted" style="margin-bottom:18px">Asigna el rol de cada miembro del equipo. Los usuarios nuevos ingresan como “Solo Lectura” hasta que les asignes un rol.</div>
+      <div class="tbl-scroll" style="overflow-x:auto"><table class="utable">
+        <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="usersBody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<div id="denyView" style="display:none">
+  <div class="login-wrap"><div class="card login-card" style="text-align:center">
+    <div class="logo">ERP-ARQ</div>
+    <p class="muted" style="margin:16px 0">No tienes permisos para acceder a la administración.</p>
+    <button class="btn" onclick="location.href='index.html'">Volver al inicio</button>
+  </div></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="erp-helpers.js"></script>
+<script>
+let CURRENT_USER = null;
+let USERS = [];
+const E = ERP.esc;
+
+fbAuth.onAuthStateChanged(async (u) => {
+  if (!u || !(u.email || '').toLowerCase().endsWith(ERP.AUTH_DOMAIN)) {
+    location.href = 'index.html';
+    return;
+  }
+  const snap = await db.collection('users').doc(u.email.toLowerCase()).get();
+  CURRENT_USER = snap.exists ? snap.data() : { email: u.email, name: u.email, role: 'lectura' };
+  if (!ERP.canManageUsers(CURRENT_USER)) {
+    document.getElementById('denyView').style.display = 'block';
+    return;
+  }
+  showApp();
+});
+
+function showApp() {
+  document.getElementById('appView').style.display = 'block';
+  const meta = ERP.ROLE_META[CURRENT_USER.role];
+  document.getElementById('userChip').textContent = CURRENT_USER.name + ' · ' + meta.l;
+  db.collection('users').onSnapshot(snap => {
+    USERS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (ERP.ROLE_ORDER[b.role] || 0) - (ERP.ROLE_ORDER[a.role] || 0) || (a.name || '').localeCompare(b.name || ''));
+    renderUsers();
+  });
+}
+
+function renderUsers() {
+  const roleOpts = (cur) => Object.entries(ERP.ROLE_META).map(([k, m]) =>
+    '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + m.l + '</option>').join('');
+
+  document.getElementById('usersBody').innerHTML = USERS.map(u => {
+    const isSelf = u.email === CURRENT_USER.email;
+    return '<tr>' +
+      '<td><div class="u-name">' + E(u.name || '—') + (isSelf ? ' <span class="muted">(tú)</span>' : '') + '</div>' +
+        '<div class="u-email">' + E(u.email) + '</div></td>' +
+      '<td><select onchange="changeRole(\'' + E(u.email) + '\', this.value)"' + (isSelf ? ' disabled title="No puedes cambiar tu propio rol"' : '') + '>' +
+        roleOpts(u.role) + '</select></td>' +
+      '<td>' + (u.active === false
+        ? '<span class="badge-off">Inactivo</span>'
+        : '<span class="badge-on">Activo</span>') + '</td>' +
+      '<td>' + (isSelf ? '' :
+        '<button class="btn ghost" style="padding:6px 12px" onclick="toggleActive(\'' + E(u.email) + '\')">' +
+        (u.active === false ? 'Activar' : 'Desactivar') + '</button>') +
+        '<span id="msg-' + cssId(u.email) + '" class="save-msg"></span></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function cssId(email) { return email.replace(/[^a-z0-9]/gi, '_'); }
+
+function flash(email, ok, txt) {
+  const el = document.getElementById('msg-' + cssId(email));
+  if (!el) return;
+  el.className = 'save-msg ' + (ok ? 'ok' : 'err');
+  el.textContent = txt;
+  if (ok) setTimeout(() => { el.textContent = ''; }, 2500);
+}
+
+async function changeRole(email, role) {
+  try {
+    await db.collection('users').doc(email).set({ role }, { merge: true });
+    flash(email, true, '✓');
+  } catch (e) { flash(email, false, 'Error: ' + e.message); }
+}
+
+async function toggleActive(email) {
+  const u = USERS.find(x => x.email === email);
+  const next = u.active === false ? true : false;
+  try {
+    await db.collection('users').doc(email).set({ active: next }, { merge: true });
+    flash(email, true, '✓');
+  } catch (e) { flash(email, false, 'Error: ' + e.message); }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Documentos de anteproyectos. Las reglas de Storage no pueden leer
+    // Firestore, así que el control fino por rol vive en la UI (subida
+    // solo para arquitecto+). Aquí se exige dominio corporativo y límite.
+    match /projects/{pid}/{allPaths=**} {
+      allow read: if request.auth != null
+        && request.auth.token.email.matches('.*@agsnegocios[.]cl');
+      allow write: if request.auth != null
+        && request.auth.token.email.matches('.*@agsnegocios[.]cl')
+        && request.resource.size < 25 * 1024 * 1024;
+    }
+
+    match /{all=**} { allow read, write: if false; }
+  }
+}

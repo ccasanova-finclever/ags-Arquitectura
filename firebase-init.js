@@ -19,5 +19,7 @@
   firebase.initializeApp(firebaseConfig);
   window.db = firebase.firestore();
   window.fbAuth = firebase.auth();
+  // Storage es opcional: solo se usa en la pestaña Documentos.
+  try { window.fbStorage = firebase.storage(); } catch (e) { window.fbStorage = null; }
   window.__ERP_FIREBASE_INITIALIZED__ = true;
 })();

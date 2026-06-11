@@ -128,10 +128,50 @@
     return { levels: out, totals: T };
   }
 
+  // ---- Carga de ocupación (hoja OCP) ----------------------------
+  // Divisores HAB/m² por destino (editables por comuna; default OGUC).
+  const OCP_DIV = { est: 16, bodega: 40, comercio: 3, d60: 15, d140: 20, dmas: 30 };
+
+  function computeOcupacion(rows, div) {
+    const d = Object.assign({}, OCP_DIV, div || {});
+    const levels = (rows || []).map(r => {
+      const carga = Math.round(
+        num(r.est) / d.est + num(r.bodega) / d.bodega + num(r.comercio) / d.comercio +
+        num(r.d60) / d.d60 + num(r.d140) / d.d140 + num(r.dmas) / d.dmas
+      );
+      return { nivel: r.nivel, carga };
+    });
+    const total = levels.reduce((s, l) => s + l.carga, 0);
+    return { levels, total, div: d };
+  }
+
+  // ---- Dotación de estacionamientos (hoja EST) ------------------
+  // Parámetros editables por comuna; defaults del Excel base.
+  const EST_DEFAULTS = {
+    cantViviendas: 0, factorVisitas: 0.2, superficieComercio: 0,
+    m2PorEstComercio: 40, estPorBici: 5, factorBiciVisitas: 0.1
+  };
+
+  function computeEstacionamientos(p) {
+    const q = Object.assign({}, EST_DEFAULTS, p || {});
+    const vendiblesVivienda = Math.ceil(num(q.cantViviendas));            // 1 est/viv <100m²
+    const visitas = Math.ceil(num(q.factorVisitas) * vendiblesVivienda);
+    const totalVivienda = vendiblesVivienda + visitas;
+    const comercio = q.m2PorEstComercio > 0 ? Math.ceil(num(q.superficieComercio) / q.m2PorEstComercio) : 0;
+    const totalVehiculos = vendiblesVivienda + visitas + comercio;
+    const biciBase = q.estPorBici > 0 ? Math.ceil(totalVehiculos / q.estPorBici) : 0;
+    const biciVisitas = Math.ceil(biciBase * num(q.factorBiciVisitas));
+    const totalBicicletas = biciBase + biciVisitas;
+    return { vendiblesVivienda, visitas, totalVivienda, comercio, totalVehiculos,
+             biciBase, biciVisitas, totalBicicletas };
+  }
+
   // Redondeo a 2 decimales para comparación/visualización.
   function r2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
 
-  const API = { computeSurfaces, municipal, construccion, comercial, num, r2, AREA_EST };
+  const API = { computeSurfaces, municipal, construccion, comercial,
+                computeOcupacion, computeEstacionamientos, OCP_DIV, EST_DEFAULTS,
+                num, r2, AREA_EST };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else root.ERPCalc = API;
