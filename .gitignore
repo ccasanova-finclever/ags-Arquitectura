@@ -5,3 +5,12 @@ Arquitectura.png
 _harness.html
 erp-calc.test-data.js
 _h2.html
+
+# Credenciales / claves de servicio Firebase — NUNCA subir
+*serviceAccount*.json
+*firebase-adminsdk*.json
+*-adminsdk-*.json
+secrets/
+node_modules/
+package-lock.json
+package.json
