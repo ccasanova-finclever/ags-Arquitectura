@@ -2,13 +2,13 @@
    ERP-ARQ · Tema base (Warm Ivory, heredado del estilo AGS)
    ============================================================ */
 :root {
-  --bg: #FAF7F2;
+  --bg: #FCF9F5;          /* marfil del logo oficial */
   --surface: #FFFFFF;
   --ink: #1F2937;
   --ink-soft: #6B7280;
   --line: #E7E0D4;
-  --brand: #0F766E;
-  --brand-soft: #CCFBF1;
+  --brand: #285B35;       /* verde del logo oficial AGS Arquitectura */
+  --brand-soft: #DDEBE0;
   --accent: #B45309;
   --danger: #DC2626;
   --radius: 14px;

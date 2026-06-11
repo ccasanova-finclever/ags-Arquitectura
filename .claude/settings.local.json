@@ -3,7 +3,12 @@
     "allow": [
       "Read(//Users/christiancasanovavera/Desktop/**)",
       "Bash(python3 -c ' *)",
-      "Bash(cd \"/Users/christiancasanovavera/Documents/Empresas/76.887.709-2 | Sociedad de Profesionales Casanova y Cia Limitada /Finclever |Automatizaciones/Repositorios Finclever/ags-arquitectura\" && git init -b main && mkdir -p docs/specs)"
+      "Bash(cd \"/Users/christiancasanovavera/Documents/Empresas/76.887.709-2 | Sociedad de Profesionales Casanova y Cia Limitada /Finclever |Automatizaciones/Repositorios Finclever/ags-arquitectura\" && git init -b main && mkdir -p docs/specs)",
+      "Bash(gh auth *)",
+      "Bash(which git *)",
+      "Bash(ssh -T git@github.com -o StrictHostKeyChecking=accept-new -o BatchMode=yes)",
+      "Bash(grep -iE '\\\\.\\(png|jpg|jpeg|svg|webp\\)$')",
+      "Bash(sips -g pixelWidth -g pixelHeight -g hasAlpha \"/Users/christiancasanovavera/Desktop/Arquitectura.png\" \"/Users/christiancasanovavera/Desktop/Logo AGS ARQ2.png\")"
     ]
   }
 }

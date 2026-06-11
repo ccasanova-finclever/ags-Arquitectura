@@ -6,7 +6,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ERP-ARQ">
+<meta name="theme-color" content="#285B35">
 <title>ERP-ARQ · Anteproyectos</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 <link rel="stylesheet" href="erp-theme.css">
 <style>
   .proj-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:8px; }
@@ -25,8 +30,9 @@
 <!-- ===================== LOGIN ===================== -->
 <div id="loginView" class="login-wrap">
   <div class="card login-card">
-    <div class="logo">ERP-ARQ</div>
-    <div class="sub">Control de Anteproyectos · Unidad de Arquitectura</div>
+    <img src="logo-ags-arq.png" alt="AGS Arquitectura" style="width:120px;height:120px;border-radius:22px;display:block;margin:0 auto 14px">
+    <div class="logo" style="text-align:center">ERP-ARQ</div>
+    <div class="sub" style="text-align:center">Control de Anteproyectos · AGS Arquitectura</div>
     <div class="fi">
       <label>Correo corporativo</label>
       <input id="liEmail" type="email" placeholder="nombre@agsnegocios.cl" autocomplete="username">
