@@ -136,21 +136,27 @@ let CUR_TAB = 'resumen';
 const PID = new URLSearchParams(location.search).get('id');
 const E = ERP.esc;
 
-// Tabs visibles según rol (visibilidad fina llega en Fase 5)
+// Tabs visibles según rol (visibilidad fina por área de trabajo).
+const ALL_TABS = [
+  { k: 'resumen', l: 'Resumen' },
+  { k: 'terreno', l: 'Terreno' },
+  { k: 'normativa', l: 'Normativa' },
+  { k: 'alturas', l: 'Alturas' },
+  { k: 'superficies', l: 'Superficies' },
+  { k: 'estocp', l: 'Est. / Ocupación' },
+  { k: 'documentos', l: 'Documentos' },
+  { k: 'bitacora', l: 'Bitácora' }
+];
+const TABS_BY_ROLE = {
+  // Roles operativos: solo su área. (cuadrosForRole limita además qué cuadro de superficies ven.)
+  municipal:    ['resumen', 'terreno', 'normativa', 'superficies', 'estocp', 'documentos', 'bitacora'],
+  construccion: ['resumen', 'alturas', 'superficies', 'documentos', 'bitacora'],
+  comercial:    ['resumen', 'superficies', 'documentos'],
+  lectura:      ['resumen', 'documentos']
+};
 function tabsForRole(user) {
-  const all = [
-    { k: 'resumen', l: 'Resumen' },
-    { k: 'terreno', l: 'Terreno' },
-    { k: 'normativa', l: 'Normativa' },
-    { k: 'alturas', l: 'Alturas' },
-    { k: 'superficies', l: 'Superficies' },
-    { k: 'estocp', l: 'Est. / Ocupación' },
-    { k: 'documentos', l: 'Documentos' },
-    { k: 'bitacora', l: 'Bitácora' }
-  ];
-  if (user.role === 'lectura') return all.filter(t => ['resumen', 'documentos'].includes(t.k));
-  if (user.role === 'comercial') return all.filter(t => ['resumen', 'superficies', 'documentos'].includes(t.k));
-  return all;
+  const allow = TABS_BY_ROLE[user.role];
+  return allow ? ALL_TABS.filter(t => allow.includes(t.k)) : ALL_TABS; // superadmin/director/arquitecto: todo
 }
 
 // ---------- Firestore base (Write-First con rollback) ----------

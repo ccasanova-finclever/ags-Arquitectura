@@ -14,7 +14,9 @@
       "Bash(xargs kill)",
       "Bash(printf '\\\\n# Preview / harness temporales\\\\n_harness.html\\\\nerp-calc.test-data.js\\\\n')",
       "Bash(node --check erp-calc.js)",
-      "Bash(node erp-calc.test.js)"
+      "Bash(node erp-calc.test.js)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const html=fs.readFileSync\\('proyecto.html','utf8'\\);const s=[...html.matchAll\\(/<script[^>]*>\\([\\\\s\\\\S]*?\\)<\\\\/script>/gi\\)];let ok=true;s.forEach\\(m=>{if\\(m[0].match\\(/\\\\bsrc=/i\\)\\)return;try{new Function\\(m[1]\\)}catch\\(e\\){console.error\\(e.message\\);ok=false}}\\);console.log\\(ok?'proyecto.html OK':'FAIL'\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const html=fs.readFileSync\\('index.html','utf8'\\);const s=[...html.matchAll\\(/<script[^>]*>\\([\\\\s\\\\S]*?\\)<\\\\/script>/gi\\)];let ok=true;s.forEach\\(m=>{if\\(m[0].match\\(/\\\\bsrc=/i\\)\\)return;try{new Function\\(m[1]\\)}catch\\(e\\){console.error\\(e.message\\);ok=false}}\\);console.log\\(ok?'index.html OK':'FAIL'\\)\")"
     ]
   }
 }

@@ -185,6 +185,11 @@ fbAuth.onAuthStateChanged(async (u) => {
       fbAuth.signOut();
       return;
     }
+    if (CURRENT_USER.active === false) {
+      document.getElementById('liErr').textContent = 'Tu cuenta está desactivada. Contacta al administrador.';
+      fbAuth.signOut();
+      return;
+    }
     showApp();
   } else {
     CURRENT_USER = null;

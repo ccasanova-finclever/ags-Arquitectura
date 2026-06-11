@@ -1,6 +1,6 @@
 # ERP-ARQ — Diseño del sistema de control de Anteproyectos
 
-**Fecha:** 2026-06-10 · **Estado:** Borrador aprobado en lo esencial, en construcción iterativa.
+**Fecha:** 2026-06-10 · **Estado:** Implementado (F1–F5 completas al 2026-06-11). Ver `README.md` para el estado vigente.
 
 ## Contexto
 
