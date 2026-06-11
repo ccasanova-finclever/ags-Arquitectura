@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/christiancasanovavera/Desktop/**)",
+      "Bash(python3 -c ' *)",
+      "Bash(cd \"/Users/christiancasanovavera/Documents/Empresas/76.887.709-2 | Sociedad de Profesionales Casanova y Cia Limitada /Finclever |Automatizaciones/Repositorios Finclever/ags-arquitectura\" && git init -b main && mkdir -p docs/specs)"
+    ]
+  }
+}

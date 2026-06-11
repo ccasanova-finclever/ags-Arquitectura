@@ -1,0 +1,163 @@
+/* ============================================================
+   ERP-ARQ · Tema base (Warm Ivory, heredado del estilo AGS)
+   ============================================================ */
+:root {
+  --bg: #FAF7F2;
+  --surface: #FFFFFF;
+  --ink: #1F2937;
+  --ink-soft: #6B7280;
+  --line: #E7E0D4;
+  --brand: #0F766E;
+  --brand-soft: #CCFBF1;
+  --accent: #B45309;
+  --danger: #DC2626;
+  --radius: 14px;
+  --shadow: 0 1px 3px rgba(31, 41, 55, .08), 0 4px 14px rgba(31, 41, 55, .06);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 700; }
+
+/* ---- Layout -------------------------------------------------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 22px;
+  padding-top: calc(14px + env(safe-area-inset-top));
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.topbar .logo { font-size: 17px; font-weight: 800; color: var(--brand); letter-spacing: .3px; }
+.topbar .spacer { flex: 1; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 22px; }
+
+.g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 900px) { .g3 { grid-template-columns: 1fr; } }
+
+/* ---- Componentes --------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.card.project { cursor: pointer; transition: transform .12s ease, box-shadow .12s ease; }
+.card.project:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(31,41,55,.12); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--brand);
+  color: #fff;
+}
+.btn.ghost { background: transparent; color: var(--brand); border: 1px solid var(--brand); }
+.btn.soft { background: var(--brand-soft); color: var(--brand); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.chip {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: .2px;
+}
+
+.fi { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.fi label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+.fi input, .fi select, .fi textarea {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 16px; /* evita zoom auto iOS */
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+}
+.fi input:focus, .fi select:focus, .fi textarea:focus {
+  outline: 2px solid var(--brand-soft);
+  border-color: var(--brand);
+}
+
+/* ---- Modal (cierra SOLO con la X) ----------------------------- */
+.modal-ov {
+  position: fixed;
+  inset: 0;
+  background: rgba(31, 41, 55, .45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 18px;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
+}
+.modal-ov.open { display: flex; }
+.modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 22px;
+}
+.modal .m-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.modal .m-x {
+  border: none;
+  background: var(--bg);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+
+/* ---- Login ----------------------------------------------------- */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  padding-top: calc(20px + env(safe-area-inset-top));
+}
+.login-card { width: 100%; max-width: 400px; }
+.login-card .logo { font-size: 24px; font-weight: 800; color: var(--brand); margin-bottom: 4px; }
+.login-card .sub { color: var(--ink-soft); font-size: 14px; margin-bottom: 22px; }
+
+.err { color: var(--danger); font-size: 13px; min-height: 18px; }
+.muted { color: var(--ink-soft); font-size: 13px; }
+
+.empty {
+  text-align: center;
+  color: var(--ink-soft);
+  padding: 60px 20px;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+}

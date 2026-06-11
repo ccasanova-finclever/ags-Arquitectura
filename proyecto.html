@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ERP-ARQ">
+<title>ERP-ARQ · Anteproyecto</title>
+<link rel="stylesheet" href="erp-theme.css">
+<style>
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin:18px 0; }
+  .tab {
+    border:1px solid var(--line); background:var(--surface); border-radius:999px;
+    padding:8px 16px; font-size:13.5px; font-weight:600; cursor:pointer; color:var(--ink-soft);
+  }
+  .tab.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .ph { padding:40px 20px; text-align:center; color:var(--ink-soft); }
+  .head-line { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<div id="appView" style="display:none">
+  <div class="topbar">
+    <button class="btn ghost" style="padding:7px 12px" onclick="location.href='index.html'">← Volver</button>
+    <span class="logo">ERP-ARQ</span>
+    <span class="spacer"></span>
+    <span id="userChip" class="chip" style="background:var(--brand-soft);color:var(--brand)"></span>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="head-line">
+        <span id="pCode" class="chip" style="background:#F3F4F6;color:#374151"></span>
+        <span id="pStatus" class="chip"></span>
+      </div>
+      <h2 id="pName" style="margin-top:10px"></h2>
+      <div id="pMeta" class="muted" style="margin-top:6px"></div>
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+    <div id="tabContent" class="card">
+      <div class="ph">🚧 Esta sección se construye en la Fase 2.<br>
+      Por ahora la tarjeta existe como repositorio base del anteproyecto.</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="erp-helpers.js"></script>
+<script>
+let CURRENT_USER = null;
+let PROJECT = null;
+
+const PID = new URLSearchParams(location.search).get('id');
+
+// Tabs visibles según rol (visibilidad fina llega en Fase 5)
+function tabsForRole(user) {
+  const all = [
+    { k: 'resumen', l: 'Resumen' },
+    { k: 'terreno', l: 'Terreno' },
+    { k: 'normativa', l: 'Normativa' },
+    { k: 'alturas', l: 'Alturas' },
+    { k: 'superficies', l: 'Superficies' },
+    { k: 'estocp', l: 'Est. / Ocupación' },
+    { k: 'documentos', l: 'Documentos' },
+    { k: 'bitacora', l: 'Bitácora' }
+  ];
+  if (user.role === 'lectura') return all.filter(t => ['resumen', 'documentos'].includes(t.k));
+  if (user.role === 'comercial') return all.filter(t => ['resumen', 'superficies', 'documentos'].includes(t.k));
+  return all;
+}
+
+fbAuth.onAuthStateChanged(async (u) => {
+  if (!u || !(u.email || '').toLowerCase().endsWith(ERP.AUTH_DOMAIN)) {
+    location.href = 'index.html';
+    return;
+  }
+  const snap = await db.collection('users').doc(u.email.toLowerCase()).get();
+  CURRENT_USER = snap.exists ? snap.data() : { email: u.email, name: u.email, role: 'lectura' };
+  await loadProject();
+});
+
+async function loadProject() {
+  if (!PID) { location.href = 'index.html'; return; }
+  const snap = await db.collection('projects').doc(PID).get();
+  if (!snap.exists) {
+    alert('Anteproyecto no encontrado.');
+    location.href = 'index.html';
+    return;
+  }
+  PROJECT = { id: snap.id, ...snap.data() };
+  render();
+}
+
+function render() {
+  document.getElementById('appView').style.display = 'block';
+  const meta = ERP.ROLE_META[CURRENT_USER.role] || ERP.ROLE_META.lectura;
+  document.getElementById('userChip').textContent = CURRENT_USER.name + ' · ' + meta.l;
+
+  const sm = ERP.STATUS_META[PROJECT.status] || ERP.STATUS_META.estudio;
+  document.getElementById('pCode').textContent = PROJECT.code || PROJECT.id;
+  const stEl = document.getElementById('pStatus');
+  stEl.textContent = sm.l;
+  stEl.style.background = sm.bg;
+  stEl.style.color = sm.color;
+  document.getElementById('pName').textContent = PROJECT.name || '';
+  document.getElementById('pMeta').textContent =
+    '📍 ' + (PROJECT.comuna || '—') + ' · Creado ' + (PROJECT.createdAt || '—') + ' por ' + (PROJECT.createdBy || '—');
+
+  const tabs = tabsForRole(CURRENT_USER);
+  document.getElementById('tabs').innerHTML = tabs.map((t, i) =>
+    '<button class="tab' + (i === 0 ? ' on' : '') + '" onclick="selTab(this)">' + t.l + '</button>'
+  ).join('');
+}
+
+function selTab(btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  btn.classList.add('on');
+}
+</script>
+</body>
+</html>
