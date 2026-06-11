@@ -73,14 +73,94 @@ window.ERP = (function () {
   // ---- Permisos -----------------------------------------------
   function roleLevel(user) { return user ? (ROLE_ORDER[user.role] || 0) : 0; }
   function canCreateProject(user) { return roleLevel(user) >= 3; }   // arquitecto+
+  function canEditProject(user) { return roleLevel(user) >= 3; }     // arquitecto+ (coincide con firestore.rules)
   function canManageUsers(user) { return user && user.role === 'superadmin'; }
   function canSeeComercial(user) {
     return user && ['superadmin', 'director', 'arquitecto', 'comercial'].includes(user.role);
   }
 
+  // ---- Parsing numérico (acepta formato chileno o estándar) ----
+  // Si hay coma, es decimal chileno: los puntos son miles → se quitan,
+  // la coma pasa a punto. Si NO hay coma, el punto se trata como
+  // separador decimal estándar (igual que los valores del Excel: 6.766).
+  function parseNum(v) {
+    if (v === null || v === undefined || v === '') return null;
+    let s = String(v).trim();
+    if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+    const n = Number(s);
+    return isNaN(n) ? null : n;
+  }
+
+  // ---- Campos de un lote del terreno (hoja TER) ----------------
+  const TER_LOTE_FIELDS = [
+    { k: 'calle',     l: 'Calle',                 type: 'text' },
+    { k: 'numero',    l: 'Número',                type: 'text' },
+    { k: 'rolSII',    l: 'Rol SII',               type: 'text' },
+    { k: 'zonaEdif',  l: 'Zona Edificación PRC',  type: 'text' },
+    { k: 'zonaUso',   l: 'Zona Uso de Suelo PRC', type: 'text' },
+    { k: 'cipN',      l: 'CIP N°',                type: 'text' },
+    { k: 'cipFecha',  l: 'Fecha CIP',             type: 'date' },
+    { k: 'supBruta',  l: 'Sup. Bruta Terreno',    type: 'num' },
+    { k: 'supAUP',    l: 'Sup. AUP',              type: 'num' },
+    { k: 'supNeta',   l: 'Sup. Neta Terreno',     type: 'num' }
+  ];
+
+  // ---- Parámetros normativos estándar (hoja NOR) ---------------
+  // op: 'lte' = proyectado debe ser ≤ permitido (máximos);
+  //     'gte' = proyectado debe ser ≥ permitido (mínimos exigidos);
+  //     'manual' = cumplimiento se marca a mano (parámetros de texto).
+  const NOR_PARAMS = [
+    { k: 'densidadBruta',     l: 'Densidad Máxima Bruta',                         op: 'lte', u: 'hab/há' },
+    { k: 'cantViviendas',     l: 'Cantidad Máxima de Viviendas',                  op: 'lte', u: 'viv' },
+    { k: 'coefOcupSup',       l: 'Coef. Ocupación Pisos Superiores (Residencial)', op: 'lte', u: '' },
+    { k: 'supOcupSup',        l: 'Máx. Superficie Ocupación Pisos Superiores',    op: 'lte', u: 'm²' },
+    { k: 'coefOcupSuelo',     l: 'Coef. Ocupación de Suelo (Residencial)',        op: 'lte', u: '' },
+    { k: 'supOcupSuelo',      l: 'Máx. Superficie Ocupación de Suelo',            op: 'lte', u: 'm²' },
+    { k: 'coefConstr',        l: 'Coef. de Constructibilidad',                    op: 'lte', u: '' },
+    { k: 'supConstr',         l: 'Máx. Superficie Constructibilidad',             op: 'lte', u: 'm²' },
+    { k: 'distMin',           l: 'Distanciamiento Mínimo Art.2.6.12 OGUC',        op: 'gte', u: 'm' },
+    { k: 'antejardin',        l: 'Antejardín Mínimo',                             op: 'gte', u: 'm' },
+    { k: 'alturaMaxM',        l: 'Altura Máxima (metros)',                        op: 'lte', u: 'm' },
+    { k: 'alturaMaxP',        l: 'Altura Máxima (pisos)',                         op: 'lte', u: 'pisos' },
+    { k: 'subdivPredial',     l: 'Subdivisión Predial Mínima',                    op: 'gte', u: 'm²' },
+    { k: 'dotacionEst',       l: 'Dotación Mínima Estacionamientos',              op: 'gte', u: 'est' },
+    { k: 'ocupSubsuelo',      l: '% Máximo Ocupación Subsuelo',                   op: 'lte', u: '' },
+    { k: 'supSubsuelo',       l: 'Superficie Máxima Ocupación Subsuelo',          op: 'lte', u: 'm²' },
+    { k: 'rasantes',          l: 'Rasantes',                                      op: 'manual', u: '' },
+    { k: 'agrupamiento',      l: 'Sistema de Agrupamiento',                       op: 'manual', u: '' },
+    { k: 'adosamiento',       l: 'Adosamiento',                                   op: 'manual', u: '' }
+  ];
+
+  // ---- Campos de Alturas (hoja ALT, datos a ingresar) ----------
+  const ALT_FIELDS = [
+    { k: 'nEscalonesP1',    l: 'N° Escalones Piso 1',          type: 'num' },
+    { k: 'nEscalonesPt',    l: 'N° Escalones Piso Tipo',       type: 'num' },
+    { k: 'altEscalonP1',    l: 'Altura Escalón Piso 1',        type: 'num' },
+    { k: 'altEscalonPt',    l: 'Altura Escalón Piso Tipo',     type: 'num' },
+    { k: 'altCoronamiento', l: 'Altura Coronamiento',          type: 'num' },
+    { k: 'nPisosTipo',      l: 'N° Pisos Tipo',                type: 'num' },
+    { k: 'espesorLosa',     l: 'Espesor Losa',                 type: 'num' },
+    { k: 'espesorPavP1',    l: 'Espesor Pavimento Piso 1',     type: 'num' },
+    { k: 'espesorPavPt',    l: 'Espesor Pavimento Piso Tipo',  type: 'num' },
+    { k: 'nptNivel1',       l: 'NPT Nivel 1',                  type: 'num' },
+    { k: 'altMaxProyectada',l: 'Altura Máxima Proyectada',     type: 'num' }
+  ];
+
+  // Evalúa cumplimiento de un parámetro normativo.
+  // Devuelve true / false / null (sin datos suficientes).
+  function cumpleEval(op, proyectado, permitido) {
+    if (op === 'manual') return null;
+    const a = parseNum(proyectado), b = parseNum(permitido);
+    if (a === null || b === null) return null;
+    if (op === 'lte') return a <= b + 1e-6;
+    if (op === 'gte') return a >= b - 1e-6;
+    return null;
+  }
+
   return {
     ROLE_ORDER, ROLE_META, STATUS_META, SEED_USERS, AUTH_DOMAIN,
-    fmtNum, fmtM2, today, codePrefix, esc,
-    roleLevel, canCreateProject, canManageUsers, canSeeComercial
+    TER_LOTE_FIELDS, NOR_PARAMS, ALT_FIELDS,
+    fmtNum, fmtM2, today, codePrefix, esc, parseNum, cumpleEval,
+    roleLevel, canCreateProject, canEditProject, canManageUsers, canSeeComercial
   };
 })();

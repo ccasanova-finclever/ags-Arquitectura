@@ -22,6 +22,54 @@
   .tab.on { background:var(--brand); color:#fff; border-color:var(--brand); }
   .ph { padding:40px 20px; text-align:center; color:var(--ink-soft); }
   .head-line { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+
+  .sec-title { font-size:15px; font-weight:700; margin:4px 0 14px; color:var(--ink); }
+  .sec + .sec { margin-top:26px; padding-top:22px; border-top:1px solid var(--line); }
+
+  /* Tabla de datos editable */
+  .dtable { width:100%; border-collapse:collapse; font-size:13px; }
+  .dtable th { text-align:left; font-size:11.5px; font-weight:700; color:var(--ink-soft);
+    padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .dtable td { padding:4px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  .dtable input, .dtable select {
+    width:100%; min-width:70px; border:1px solid var(--line); border-radius:8px;
+    padding:7px 8px; font-size:15px; background:#fff; color:var(--ink); font-family:inherit;
+  }
+  .dtable input:disabled, .dtable select:disabled { background:#FAF7F2; color:var(--ink); border-color:transparent; }
+  .dtable input:focus, .dtable select:focus { outline:2px solid var(--brand-soft); border-color:var(--brand); }
+  .tbl-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+
+  /* Grilla de campos (Alturas) */
+  .fgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px 16px; }
+  @media (max-width:760px){ .fgrid { grid-template-columns:1fr 1fr; } }
+  @media (max-width:480px){ .fgrid { grid-template-columns:1fr; } }
+
+  /* KPIs */
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  @media (max-width:760px){ .kpis { grid-template-columns:1fr 1fr; } }
+  .kpi { background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .kpi .k-l { font-size:11.5px; font-weight:600; color:var(--ink-soft); }
+  .kpi .k-v { font-size:20px; font-weight:800; margin-top:4px; color:var(--ink); }
+  .kpi .k-s { font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+
+  .cumple-y { color:#16A34A; font-weight:800; }
+  .cumple-n { color:#DC2626; font-weight:800; }
+  .cumple-na{ color:var(--ink-soft); }
+
+  .save-bar { display:flex; align-items:center; gap:14px; margin-top:20px; }
+  .save-msg { font-size:13px; color:var(--ink-soft); }
+  .save-msg.ok { color:#16A34A; }
+  .save-msg.err { color:#DC2626; }
+
+  .row-actions { display:flex; gap:8px; margin-top:12px; }
+  .icon-btn {
+    border:1px solid var(--line); background:#fff; border-radius:8px; width:34px; height:34px;
+    cursor:pointer; color:var(--danger); font-size:15px;
+  }
+  .check-list { display:flex; flex-direction:column; gap:10px; }
+  .check-list label { display:flex; align-items:center; gap:10px; font-size:14px; cursor:pointer; }
+  .check-list input { width:18px; height:18px; }
+  .ro-note { font-size:12.5px; color:var(--ink-soft); margin-bottom:14px; }
 </style>
 </head>
 <body>
@@ -44,10 +92,7 @@
     </div>
 
     <div class="tabs" id="tabs"></div>
-    <div id="tabContent" class="card">
-      <div class="ph">🚧 Esta sección se construye en la Fase 2.<br>
-      Por ahora la tarjeta existe como repositorio base del anteproyecto.</div>
-    </div>
+    <div id="tabContent" class="card"></div>
   </div>
 </div>
 
@@ -59,8 +104,11 @@
 <script>
 let CURRENT_USER = null;
 let PROJECT = null;
+let EDIT = false;            // ¿el usuario puede editar datos técnicos?
+let CUR_TAB = 'resumen';
 
 const PID = new URLSearchParams(location.search).get('id');
+const E = ERP.esc;
 
 // Tabs visibles según rol (visibilidad fina llega en Fase 5)
 function tabsForRole(user) {
@@ -79,6 +127,20 @@ function tabsForRole(user) {
   return all;
 }
 
+// ---------- Firestore base (Write-First con rollback) ----------
+async function saveSection(patch) {
+  const prev = JSON.parse(JSON.stringify(PROJECT));
+  Object.assign(PROJECT, patch);
+  try {
+    await db.collection('projects').doc(PID).set(patch, { merge: true });
+    return true;
+  } catch (e) {
+    PROJECT = prev;
+    throw e;
+  }
+}
+
+// ---------- Auth + carga ----------
 fbAuth.onAuthStateChanged(async (u) => {
   if (!u || !(u.email || '').toLowerCase().endsWith(ERP.AUTH_DOMAIN)) {
     location.href = 'index.html';
@@ -86,6 +148,7 @@ fbAuth.onAuthStateChanged(async (u) => {
   }
   const snap = await db.collection('users').doc(u.email.toLowerCase()).get();
   CURRENT_USER = snap.exists ? snap.data() : { email: u.email, name: u.email, role: 'lectura' };
+  EDIT = ERP.canEditProject(CURRENT_USER);
   await loadProject();
 });
 
@@ -105,7 +168,17 @@ function render() {
   document.getElementById('appView').style.display = 'block';
   const meta = ERP.ROLE_META[CURRENT_USER.role] || ERP.ROLE_META.lectura;
   document.getElementById('userChip').textContent = CURRENT_USER.name + ' · ' + meta.l;
+  renderHeader();
 
+  const tabs = tabsForRole(CURRENT_USER);
+  if (!tabs.find(t => t.k === CUR_TAB)) CUR_TAB = tabs[0].k;
+  document.getElementById('tabs').innerHTML = tabs.map(t =>
+    '<button class="tab' + (t.k === CUR_TAB ? ' on' : '') + '" onclick="selTab(\'' + t.k + '\')">' + t.l + '</button>'
+  ).join('');
+  renderTab(CUR_TAB);
+}
+
+function renderHeader() {
   const sm = ERP.STATUS_META[PROJECT.status] || ERP.STATUS_META.estudio;
   document.getElementById('pCode').textContent = PROJECT.code || PROJECT.id;
   const stEl = document.getElementById('pStatus');
@@ -115,16 +188,342 @@ function render() {
   document.getElementById('pName').textContent = PROJECT.name || '';
   document.getElementById('pMeta').textContent =
     '📍 ' + (PROJECT.comuna || '—') + ' · Creado ' + (PROJECT.createdAt || '—') + ' por ' + (PROJECT.createdBy || '—');
-
-  const tabs = tabsForRole(CURRENT_USER);
-  document.getElementById('tabs').innerHTML = tabs.map((t, i) =>
-    '<button class="tab' + (i === 0 ? ' on' : '') + '" onclick="selTab(this)">' + t.l + '</button>'
-  ).join('');
 }
 
-function selTab(btn) {
+function selTab(k) {
+  CUR_TAB = k;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
-  btn.classList.add('on');
+  const tabs = tabsForRole(CURRENT_USER);
+  const idx = tabs.findIndex(t => t.k === k);
+  if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('on');
+  renderTab(k);
+}
+
+function renderTab(k) {
+  const c = document.getElementById('tabContent');
+  if (k === 'resumen') c.innerHTML = tabResumen();
+  else if (k === 'terreno') c.innerHTML = tabTerreno();
+  else if (k === 'normativa') c.innerHTML = tabNormativa();
+  else if (k === 'alturas') c.innerHTML = tabAlturas();
+  else if (k === 'superficies') c.innerHTML = tabPlaceholder('Superficies (Municipal · Construcción · Comercial)', 'Fase 3 — motor de cálculo erp-calc.js');
+  else if (k === 'estocp') c.innerHTML = tabPlaceholder('Estacionamientos y Carga de Ocupación', 'Fase 4');
+  else if (k === 'documentos') c.innerHTML = tabPlaceholder('Documentos del proyecto', 'Fase 4 — almacenamiento en Firebase Storage');
+  else if (k === 'bitacora') c.innerHTML = tabPlaceholder('Bitácora de cambios', 'Fase 4');
+}
+
+function tabPlaceholder(title, fase) {
+  return '<div class="ph">🚧 <strong>' + E(title) + '</strong><br>' + E(fase) + '</div>';
+}
+
+function roNote() {
+  return EDIT ? '' : '<div class="ro-note">👁️ Vista de solo lectura para tu rol. La edición de datos técnicos corresponde a Arquitecto, Director o Super Administrador.</div>';
+}
+
+function dis() { return EDIT ? '' : ' disabled'; }
+
+// ============================================================
+//  RESUMEN
+// ============================================================
+function tabResumen() {
+  const lotes = (PROJECT.terreno && PROJECT.terreno.lotes) || [];
+  const supNeta = lotes.reduce((s, l) => s + (ERP.parseNum(l.supNeta) || 0), 0);
+  const par = (PROJECT.normativa && PROJECT.normativa.params) || {};
+  const get = k => par[k] || {};
+  const dens = get('densidadBruta'), constr = get('coefConstr'), viv = get('cantViviendas');
+
+  // Cumplimiento global
+  let cumplen = 0, evaluables = 0, fallan = [];
+  ERP.NOR_PARAMS.forEach(p => {
+    const r = par[p.k] || {};
+    const res = p.op === 'manual'
+      ? (r.cumple ? (r.cumple === 'SÍ') : null)
+      : ERP.cumpleEval(p.op, r.proyectado, r.permitido);
+    if (res === true) { cumplen++; evaluables++; }
+    else if (res === false) { evaluables++; fallan.push(p.l); }
+  });
+
+  const statusOpts = Object.entries(ERP.STATUS_META).map(([k, m]) =>
+    '<option value="' + k + '"' + (PROJECT.status === k ? ' selected' : '') + '>' + m.l + '</option>'
+  ).join('');
+
+  return '' +
+    '<div class="sec">' +
+      '<div class="sec-title">Indicadores del anteproyecto</div>' +
+      '<div class="kpis">' +
+        kpi('Comuna', PROJECT.comuna || '—', lotes.length + ' lote(s)') +
+        kpi('Sup. Neta Terreno', ERP.fmtNum(supNeta, 2) + ' m²', 'suma de lotes') +
+        kpi('N° Viviendas', viv.proyectado != null && viv.proyectado !== '' ? ERP.fmtNum(viv.proyectado) : '—',
+            viv.permitido ? 'máx ' + ERP.fmtNum(viv.permitido) : '') +
+        kpi('Cumplimiento', evaluables ? cumplen + '/' + evaluables : '—', 'parámetros que cumplen') +
+        kpi('Densidad Bruta', dens.proyectado ? ERP.fmtNum(dens.proyectado, 1) : '—',
+            dens.permitido ? 'máx ' + ERP.fmtNum(dens.permitido, 1) : '') +
+        kpi('Constructibilidad', constr.proyectado ? ERP.fmtNum(constr.proyectado, 2) : '—',
+            constr.permitido ? 'máx ' + ERP.fmtNum(constr.permitido, 2) : '') +
+      '</div>' +
+      (fallan.length ? '<div class="ro-note" style="margin-top:14px;color:#DC2626">⚠️ No cumplen: ' + E(fallan.join(' · ')) + '</div>' : '') +
+    '</div>' +
+
+    '<div class="sec">' +
+      '<div class="sec-title">Estado</div>' +
+      (EDIT
+        ? '<div class="fi" style="max-width:280px"><label>Estado del anteproyecto</label>' +
+          '<select id="rsStatus">' + statusOpts + '</select></div>' +
+          '<div class="save-bar"><button class="btn" onclick="saveStatus()">Actualizar estado</button>' +
+          '<span id="rsMsg" class="save-msg"></span></div>'
+        : '<div class="muted">Estado actual: <strong>' + E((ERP.STATUS_META[PROJECT.status] || {}).l || PROJECT.status) + '</strong></div>') +
+    '</div>';
+}
+
+function kpi(l, v, s) {
+  return '<div class="kpi"><div class="k-l">' + E(l) + '</div><div class="k-v">' + E(v) + '</div>' +
+    (s ? '<div class="k-s">' + E(s) + '</div>' : '') + '</div>';
+}
+
+async function saveStatus() {
+  const v = document.getElementById('rsStatus').value;
+  const msg = document.getElementById('rsMsg');
+  msg.className = 'save-msg'; msg.textContent = 'Guardando…';
+  try {
+    await saveSection({ status: v });
+    renderHeader();
+    msg.className = 'save-msg ok'; msg.textContent = '✓ Estado actualizado';
+  } catch (e) {
+    msg.className = 'save-msg err'; msg.textContent = 'Error: ' + e.message;
+  }
+}
+
+// ============================================================
+//  TERRENO
+// ============================================================
+function tabTerreno() {
+  return '' + roNote() +
+    '<div class="sec">' +
+      '<div class="sec-title">Lotes del terreno</div>' +
+      '<div class="tbl-scroll"><table class="dtable"><thead><tr>' +
+        '<th>#</th>' + ERP.TER_LOTE_FIELDS.map(f => '<th>' + E(f.l) + '</th>').join('') +
+        (EDIT ? '<th></th>' : '') +
+      '</tr></thead><tbody id="lotesBody">' +
+        renderLoteRows() +
+      '</tbody></table></div>' +
+      (EDIT ? '<div class="row-actions"><button class="btn soft" onclick="addLote()">+ Agregar lote</button></div>' : '') +
+    '</div>' +
+
+    '<div class="sec">' +
+      '<div class="sec-title">Polígonos para cálculo de densidad bruta</div>' +
+      '<div class="tbl-scroll"><table class="dtable"><thead><tr>' +
+        '<th>Polígono</th><th>Lado A (m)</th><th>Lado B (m)</th><th>Sup. A×B (m²)</th>' +
+      '</tr></thead><tbody id="poliBody">' + renderPoliRows() + '</tbody></table></div>' +
+    '</div>' +
+
+    saveBar('saveTerreno');
+}
+
+function renderLoteRows() {
+  const lotes = (PROJECT.terreno && PROJECT.terreno.lotes) || [];
+  if (!lotes.length && !EDIT) return '<tr><td colspan="' + (ERP.TER_LOTE_FIELDS.length + 1) + '" class="muted">Sin lotes registrados.</td></tr>';
+  const rows = lotes.length ? lotes : (EDIT ? [{}] : []);
+  return rows.map((lo, i) => loteRow(lo, i)).join('');
+}
+
+function loteRow(lo, i) {
+  return '<tr class="lote-row"><td>' + (i + 1) + '</td>' +
+    ERP.TER_LOTE_FIELDS.map(f => {
+      const v = lo[f.k] == null ? '' : lo[f.k];
+      const t = f.type === 'date' ? 'date' : (f.type === 'num' ? 'text' : 'text');
+      const im = f.type === 'num' ? ' inputmode="decimal"' : '';
+      return '<td><input data-k="' + f.k + '" type="' + t + '"' + im + ' value="' + E(v) + '"' + dis() + '></td>';
+    }).join('') +
+    (EDIT ? '<td><button class="icon-btn" title="Eliminar lote" onclick="delLote(this)">✕</button></td>' : '') +
+    '</tr>';
+}
+
+function renderPoliRows() {
+  const polis = (PROJECT.terreno && PROJECT.terreno.poligonos) || [];
+  const base = polis.length ? polis : [{ nombre: 'P1' }, { nombre: 'P2' }, { nombre: 'P3' }, { nombre: 'P4' }];
+  return base.map((p, i) => {
+    const a = p.ladoA == null ? '' : p.ladoA, b = p.ladoB == null ? '' : p.ladoB;
+    const sup = (ERP.parseNum(a) || 0) * (ERP.parseNum(b) || 0);
+    return '<tr class="poli-row">' +
+      '<td><input data-k="nombre" value="' + E(p.nombre || ('P' + (i + 1))) + '"' + dis() + ' style="min-width:60px"></td>' +
+      '<td><input data-k="ladoA" inputmode="decimal" value="' + E(a) + '"' + dis() + ' oninput="recalcPoli()"></td>' +
+      '<td><input data-k="ladoB" inputmode="decimal" value="' + E(b) + '"' + dis() + ' oninput="recalcPoli()"></td>' +
+      '<td class="poli-sup">' + (sup ? ERP.fmtNum(sup, 2) : '—') + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function recalcPoli() {
+  document.querySelectorAll('#poliBody .poli-row').forEach(r => {
+    const a = ERP.parseNum(r.querySelector('[data-k="ladoA"]').value) || 0;
+    const b = ERP.parseNum(r.querySelector('[data-k="ladoB"]').value) || 0;
+    r.querySelector('.poli-sup').textContent = (a * b) ? ERP.fmtNum(a * b, 2) : '—';
+  });
+}
+
+function addLote() {
+  document.getElementById('lotesBody').insertAdjacentHTML('beforeend',
+    loteRow({}, document.querySelectorAll('#lotesBody .lote-row').length));
+}
+function delLote(btn) {
+  btn.closest('.lote-row').remove();
+  // Renumerar
+  document.querySelectorAll('#lotesBody .lote-row').forEach((r, i) => r.firstElementChild.textContent = i + 1);
+}
+
+function collectTerreno() {
+  const lotes = [...document.querySelectorAll('#lotesBody .lote-row')].map(r => {
+    const o = {};
+    r.querySelectorAll('[data-k]').forEach(inp => { o[inp.dataset.k] = inp.value.trim(); });
+    return o;
+  }).filter(o => Object.values(o).some(v => v !== ''));
+  const poligonos = [...document.querySelectorAll('#poliBody .poli-row')].map(r => {
+    const o = {};
+    r.querySelectorAll('[data-k]').forEach(inp => { o[inp.dataset.k] = inp.value.trim(); });
+    return o;
+  });
+  const terreno = Object.assign({}, PROJECT.terreno, { lotes, poligonos });
+  return { terreno };
+}
+
+async function saveTerreno() { await doSave('saveTerreno', collectTerreno()); }
+
+// ============================================================
+//  NORMATIVA
+// ============================================================
+function tabNormativa() {
+  const par = (PROJECT.normativa && PROJECT.normativa.params) || {};
+  const esp = (PROJECT.normativa && PROJECT.normativa.especiales) || {};
+
+  const rows = ERP.NOR_PARAMS.map(p => {
+    const r = par[p.k] || {};
+    const proj = r.proyectado == null ? '' : r.proyectado;
+    const perm = r.permitido == null ? '' : r.permitido;
+    let cumpleCell;
+    if (p.op === 'manual') {
+      const opts = ['', 'SÍ', 'NO'].map(o =>
+        '<option value="' + o + '"' + ((r.cumple || '') === o ? ' selected' : '') + '>' + (o || '—') + '</option>').join('');
+      cumpleCell = '<select data-k="cumple"' + dis() + '>' + opts + '</select>';
+    } else {
+      cumpleCell = '<span class="cumple-cell" id="cum-' + p.k + '">' + cumpleBadge(ERP.cumpleEval(p.op, proj, perm)) + '</span>';
+    }
+    return '<tr class="nor-row" data-key="' + p.k + '" data-op="' + p.op + '">' +
+      '<td style="min-width:200px;white-space:normal">' + E(p.l) + (p.u ? ' <span class="muted">(' + E(p.u) + ')</span>' : '') + '</td>' +
+      '<td><input data-k="proyectado" ' + (p.op === 'manual' ? '' : 'inputmode="decimal" ') + 'value="' + E(proj) + '"' + dis() + ' oninput="recalcNor(this)"></td>' +
+      '<td><input data-k="permitido" ' + (p.op === 'manual' ? '' : 'inputmode="decimal" ') + 'value="' + E(perm) + '"' + dis() + ' oninput="recalcNor(this)"></td>' +
+      '<td>' + cumpleCell + '</td>' +
+    '</tr>';
+  }).join('');
+
+  const chk = (k, l) => '<label><input type="checkbox" data-esp="' + k + '"' + (esp[k] ? ' checked' : '') + dis() + '> ' + E(l) + '</label>';
+
+  return '' + roNote() +
+    '<div class="sec">' +
+      '<div class="sec-title">Cumplimiento de condiciones urbanísticas</div>' +
+      '<div class="tbl-scroll"><table class="dtable"><thead><tr>' +
+        '<th>Parámetro</th><th>Proyectado</th><th>Permitido</th><th>Cumple</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '</div>' +
+
+    '<div class="sec">' +
+      '<div class="sec-title">Normas especiales aplicables</div>' +
+      '<div class="check-list">' +
+        chk('fusionArt63', 'Beneficio Fusión Art.63 LGUC (incremento constructibilidad 30%)') +
+        chk('conjuntoArmonico', 'Conjunto Armónico Art.2.6.5 OGUC (incremento constructibilidad 50%)') +
+        chk('incrementoAltura', 'Incremento 25% altura por Conjunto Armónico Art.2.6.9 OGUC') +
+        chk('sombras', 'Sombras Art.2.6.11 OGUC') +
+      '</div>' +
+    '</div>' +
+
+    saveBar('saveNormativa');
+}
+
+function cumpleBadge(res) {
+  if (res === true) return '<span class="cumple-y">SÍ ✓</span>';
+  if (res === false) return '<span class="cumple-n">NO ✗</span>';
+  return '<span class="cumple-na">—</span>';
+}
+
+function recalcNor(inp) {
+  const tr = inp.closest('.nor-row');
+  const op = tr.dataset.op;
+  if (op === 'manual') return;
+  const proj = tr.querySelector('[data-k="proyectado"]').value;
+  const perm = tr.querySelector('[data-k="permitido"]').value;
+  const cell = tr.querySelector('.cumple-cell');
+  if (cell) cell.innerHTML = cumpleBadge(ERP.cumpleEval(op, proj, perm));
+}
+
+function collectNormativa() {
+  const params = {};
+  document.querySelectorAll('.nor-row').forEach(tr => {
+    const key = tr.dataset.key, op = tr.dataset.op;
+    const o = {
+      proyectado: tr.querySelector('[data-k="proyectado"]').value.trim(),
+      permitido: tr.querySelector('[data-k="permitido"]').value.trim()
+    };
+    if (op === 'manual') o.cumple = tr.querySelector('[data-k="cumple"]').value;
+    params[key] = o;
+  });
+  const especiales = {};
+  document.querySelectorAll('[data-esp]').forEach(c => { especiales[c.dataset.esp] = c.checked; });
+  const normativa = Object.assign({}, PROJECT.normativa, { params, especiales });
+  return { normativa };
+}
+
+async function saveNormativa() { await doSave('saveNormativa', collectNormativa()); }
+
+// ============================================================
+//  ALTURAS
+// ============================================================
+function tabAlturas() {
+  const a = PROJECT.alturas || {};
+  const fields = ERP.ALT_FIELDS.map(f => {
+    const v = a[f.k] == null ? '' : a[f.k];
+    return '<div class="fi"><label>' + E(f.l) + '</label>' +
+      '<input data-k="' + f.k + '" inputmode="decimal" value="' + E(v) + '"' + dis() + '></div>';
+  }).join('');
+
+  return '' + roNote() +
+    '<div class="sec">' +
+      '<div class="sec-title">Datos de alturas a ingresar</div>' +
+      '<div class="fgrid">' + fields + '</div>' +
+      '<div class="ro-note" style="margin-top:16px">El estudio de sombras, rampas y volúmenes teóricos se incorpora en la Fase 3 junto al motor de cálculo.</div>' +
+    '</div>' +
+    saveBar('saveAlturas');
+}
+
+function collectAlturas() {
+  const alturas = Object.assign({}, PROJECT.alturas);
+  document.querySelectorAll('#tabContent [data-k]').forEach(inp => {
+    if (inp.closest('.fgrid')) alturas[inp.dataset.k] = inp.value.trim();
+  });
+  return { alturas };
+}
+
+async function saveAlturas() { await doSave('saveAlturas', collectAlturas()); }
+
+// ============================================================
+//  Guardado común
+// ============================================================
+function saveBar(fn) {
+  if (!EDIT) return '';
+  return '<div class="save-bar"><button class="btn" id="btn-' + fn + '" onclick="' + fn + '()">Guardar cambios</button>' +
+    '<span id="msg-' + fn + '" class="save-msg"></span></div>';
+}
+
+async function doSave(fn, patch) {
+  const btn = document.getElementById('btn-' + fn);
+  const msg = document.getElementById('msg-' + fn);
+  if (btn) btn.disabled = true;
+  if (msg) { msg.className = 'save-msg'; msg.textContent = 'Guardando…'; }
+  try {
+    await saveSection(patch);
+    if (msg) { msg.className = 'save-msg ok'; msg.textContent = '✓ Guardado'; }
+  } catch (e) {
+    if (msg) { msg.className = 'save-msg err'; msg.textContent = 'Error: ' + e.message; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 </script>
 </body>

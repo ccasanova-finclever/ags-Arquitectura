@@ -31,7 +31,8 @@ la carpeta a Netlify Drop.
 ## Estado de fases
 
 - [x] **F1** Fundación: login, seed usuarios, grilla, creación de anteproyectos, rules.
-- [ ] **F2** `proyecto.html`: tabs Terreno / Normativa / Alturas con persistencia.
-- [ ] **F3** `erp-calc.js`: motor de cálculo (cuadros Municipal/Construcción/Comercial, verificación cruzada, semáforos).
+- [x] **F2** `proyecto.html`: tabs Terreno / Normativa / Alturas con persistencia Write-First.
+      Normativa ya evalúa cumplimiento (proyectado vs. permitido) con semáforo en vivo.
+- [ ] **F3** `erp-calc.js`: motor de cálculo (cuadros Municipal/Construcción/Comercial, verificación cruzada; el proyectado de Normativa pasa a derivarse de las superficies).
 - [ ] **F4** Est/Ocp, Documentos (Storage), Bitácora, `admin.html`.
 - [ ] **F5** Visibilidad fina por rol dentro de la tarjeta + rules granulares.
