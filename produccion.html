@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ERP-ARQ">
+<meta name="theme-color" content="#285B35">
+<title>ERP-ARQ · Producción</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="stylesheet" href="erp-theme.css">
+<style>
+  .proj-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:8px; }
+  .proj-code { font-size:12px; font-weight:700; color:var(--ink-soft); letter-spacing:.5px; }
+  .proj-name { font-size:16px; font-weight:700; margin:2px 0 6px; }
+  .proj-meta { font-size:13px; color:var(--ink-soft); }
+  .filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; align-items:center; }
+  .filters input, .filters select {
+    border:1px solid var(--line); border-radius:10px; padding:9px 12px; font-size:16px; background:#fff;
+  }
+  .filters input { flex:1; min-width:180px; }
+</style>
+</head>
+<body>
+<div id="appView" style="display:none">
+  <div class="topbar">
+    <button class="btn ghost" style="padding:7px 12px" onclick="location.href='index.html'">← Hub</button>
+    <span class="logo">ARQ Producción</span>
+    <span class="spacer"></span>
+    <span id="userChip" class="chip" style="background:var(--brand-soft);color:var(--brand)"></span>
+    <button class="btn ghost" style="padding:7px 12px" onclick="doLogout()">Salir</button>
+  </div>
+
+  <div class="wrap">
+    <div class="filters">
+      <input id="fSearch" type="search" placeholder="Buscar por código, nombre o comuna…" oninput="renderProjects()">
+      <select id="fStatus" onchange="renderProjects()">
+        <option value="">Todos los estados</option>
+      </select>
+      <button id="btnNew" class="btn" style="display:none" onclick="openNewModal()">+ Nuevo Anteproyecto</button>
+    </div>
+    <div id="grid" class="g3"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL NUEVO ===================== -->
+<div id="newOv" class="modal-ov">
+  <div class="modal">
+    <div class="m-head">
+      <h3>Nuevo Anteproyecto</h3>
+      <button class="m-x" onclick="closeNewModal()">✕</button>
+    </div>
+    <div class="g3" style="gap:10px">
+      <div class="fi">
+        <label>Año (AA)</label>
+        <input id="npYear" type="text" inputmode="numeric" maxlength="2" placeholder="26" oninput="updateCodePreview()">
+      </div>
+      <div class="fi">
+        <label>N° correlativo</label>
+        <input id="npNum" type="text" inputmode="numeric" placeholder="20" oninput="updateCodePreview()">
+      </div>
+      <div class="fi">
+        <label>Ubicación (3 letras)</label>
+        <input id="npLoc" type="text" maxlength="3" placeholder="UTE" oninput="updateCodePreview()" style="text-transform:uppercase">
+      </div>
+    </div>
+    <div class="muted" style="margin:-6px 0 14px">Código del proyecto: <strong id="npPreview" style="color:var(--brand);font-size:16px">——————</strong></div>
+    <div class="fi">
+      <label>Nombre del proyecto</label>
+      <input id="npName" type="text" placeholder="Ej: Edificio José Pedro Alessandri 1880">
+    </div>
+    <div class="fi">
+      <label>Comuna</label>
+      <input id="npComuna" type="text" placeholder="Ej: Ñuñoa">
+    </div>
+    <div id="npErr" class="err"></div>
+    <button class="btn" style="width:100%;justify-content:center" onclick="createProject()">Crear</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="erp-helpers.js"></script>
+<script>
+let CURRENT_USER = null;
+let PROJECTS = [];
+let _lastHash = { projects: '' };
+let _unsubProjects = null;
+
+function hashSnap(docs) { return docs.map(d => d.id).sort().join(','); }
+async function fsSet(col, id, data) { await db.collection(col).doc(String(id)).set(data, { merge: true }); }
+function doLogout() { fbAuth.signOut(); }
+
+fbAuth.onAuthStateChanged(async (u) => {
+  if (!u || !(u.email || '').toLowerCase().endsWith(ERP.AUTH_DOMAIN)) { location.href = 'index.html'; return; }
+  const snap = await db.collection('users').doc(u.email.toLowerCase()).get();
+  CURRENT_USER = snap.exists ? snap.data() : { email: u.email, name: u.email, role: 'lectura' };
+  if (CURRENT_USER.active === false) { location.href = 'index.html'; return; }
+  showApp();
+});
+
+function showApp() {
+  document.getElementById('appView').style.display = 'block';
+  const meta = ERP.ROLE_META[CURRENT_USER.role] || ERP.ROLE_META.lectura;
+  document.getElementById('userChip').textContent = CURRENT_USER.name + ' · ' + meta.l;
+  document.getElementById('btnNew').style.display = ERP.canCreateProject(CURRENT_USER) ? 'inline-flex' : 'none';
+
+  const sel = document.getElementById('fStatus');
+  if (sel.options.length === 1) {
+    Object.entries(ERP.STATUS_META).forEach(([k, m]) => {
+      const o = document.createElement('option');
+      o.value = k; o.textContent = m.l;
+      sel.appendChild(o);
+    });
+  }
+  setupProjectsListener();
+}
+
+function setupProjectsListener() {
+  if (_unsubProjects) return;
+  _unsubProjects = db.collection('projects').onSnapshot(snap => {
+    const h = hashSnap(snap.docs);
+    if (h === _lastHash.projects && PROJECTS.length === snap.docs.length) return;
+    _lastHash.projects = h;
+    PROJECTS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderProjects();
+  }, e => {
+    document.getElementById('grid').innerHTML =
+      '<div class="empty">Error cargando proyectos: ' + ERP.esc(e.message) + '</div>';
+  });
+}
+
+function renderProjects() {
+  const q = (document.getElementById('fSearch').value || '').toLowerCase();
+  const st = document.getElementById('fStatus').value;
+  const grid = document.getElementById('grid');
+
+  let list = PROJECTS.slice().sort((a, b) => Number(b.id) - Number(a.id));
+  if (st) list = list.filter(p => p.status === st);
+  if (q) list = list.filter(p =>
+    (p.code || '').toLowerCase().includes(q) ||
+    (p.name || '').toLowerCase().includes(q) ||
+    (p.comuna || '').toLowerCase().includes(q));
+
+  if (!list.length) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">' +
+      (PROJECTS.length ? 'Sin resultados para el filtro actual.' :
+        'Aún no hay anteproyectos. ' +
+        (ERP.canCreateProject(CURRENT_USER) ? 'Crea el primero con el botón "+ Nuevo Anteproyecto".' : '')) +
+      '</div>';
+    return;
+  }
+
+  grid.innerHTML = list.map(p => {
+    const sm = ERP.STATUS_META[p.status] || ERP.STATUS_META.estudio;
+    return '<div class="card project" onclick="openProject(\'' + p.id + '\')">' +
+      '<div class="proj-head">' +
+        '<span class="proj-code">' + ERP.esc(p.code) + '</span>' +
+        '<span class="chip" style="background:' + sm.bg + ';color:' + sm.color + '">' + sm.l + '</span>' +
+      '</div>' +
+      '<div class="proj-name">' + ERP.esc(p.name) + '</div>' +
+      '<div class="proj-meta">📍 ' + ERP.esc(p.comuna || '—') + ' · Creado ' + ERP.esc(p.createdAt || '—') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function openProject(id) { location.href = 'proyecto.html?id=' + encodeURIComponent(id); }
+
+// ---------- Crear anteproyecto (Write-First con rollback) ----------
+function openNewModal() {
+  document.getElementById('npYear').value = ERP.yy();
+  document.getElementById('npNum').value = '';
+  document.getElementById('npLoc').value = '';
+  document.getElementById('npName').value = '';
+  document.getElementById('npComuna').value = '';
+  document.getElementById('npErr').textContent = '';
+  updateCodePreview();
+  document.getElementById('newOv').classList.add('open');
+}
+function closeNewModal() { document.getElementById('newOv').classList.remove('open'); }
+
+function currentCode() {
+  return ERP.buildCode(
+    document.getElementById('npYear').value,
+    document.getElementById('npNum').value,
+    document.getElementById('npLoc').value
+  );
+}
+function updateCodePreview() {
+  document.getElementById('npPreview').textContent = currentCode() || '——————';
+}
+
+async function createProject() {
+  const code = currentCode();
+  const name = document.getElementById('npName').value.trim();
+  const comuna = document.getElementById('npComuna').value.trim();
+  const err = document.getElementById('npErr');
+  err.textContent = '';
+  if (!name) { err.textContent = 'El nombre es obligatorio.'; return; }
+  if (code.length < 7) { err.textContent = 'Completa año (2 dígitos), correlativo y ubicación (3 letras).'; return; }
+
+  const id = String(Date.now());
+  const proj = {
+    id, code, name, comuna,
+    status: 'estudio',
+    createdAt: ERP.today(),
+    createdBy: CURRENT_USER.email,
+    terreno: { comuna, lotes: [] },
+    normativa: {}, alturas: {}, pisos: [], productos: [], estacionamientos: {}, ocupacion: {}
+  };
+
+  const prevData = [...PROJECTS];
+  try {
+    PROJECTS = [...PROJECTS, proj];
+    _lastHash.projects = hashSnap(PROJECTS.map(p => ({ id: String(p.id) })));
+    await fsSet('projects', id, proj);
+    renderProjects();
+    closeNewModal();
+  } catch (e) {
+    PROJECTS = prevData;
+    _lastHash.projects = hashSnap(PROJECTS.map(p => ({ id: String(p.id) })));
+    err.textContent = 'Error al crear: ' + e.message;
+  }
+}
+</script>
+</body>
+</html>

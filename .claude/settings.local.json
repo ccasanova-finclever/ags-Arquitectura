@@ -16,7 +16,8 @@
       "Bash(node --check erp-calc.js)",
       "Bash(node erp-calc.test.js)",
       "Bash(node -e \"const fs=require\\('fs'\\);const html=fs.readFileSync\\('proyecto.html','utf8'\\);const s=[...html.matchAll\\(/<script[^>]*>\\([\\\\s\\\\S]*?\\)<\\\\/script>/gi\\)];let ok=true;s.forEach\\(m=>{if\\(m[0].match\\(/\\\\bsrc=/i\\)\\)return;try{new Function\\(m[1]\\)}catch\\(e\\){console.error\\(e.message\\);ok=false}}\\);console.log\\(ok?'proyecto.html OK':'FAIL'\\)\")",
-      "Bash(node -e \"const fs=require\\('fs'\\);const html=fs.readFileSync\\('index.html','utf8'\\);const s=[...html.matchAll\\(/<script[^>]*>\\([\\\\s\\\\S]*?\\)<\\\\/script>/gi\\)];let ok=true;s.forEach\\(m=>{if\\(m[0].match\\(/\\\\bsrc=/i\\)\\)return;try{new Function\\(m[1]\\)}catch\\(e\\){console.error\\(e.message\\);ok=false}}\\);console.log\\(ok?'index.html OK':'FAIL'\\)\")"
+      "Bash(node -e \"const fs=require\\('fs'\\);const html=fs.readFileSync\\('index.html','utf8'\\);const s=[...html.matchAll\\(/<script[^>]*>\\([\\\\s\\\\S]*?\\)<\\\\/script>/gi\\)];let ok=true;s.forEach\\(m=>{if\\(m[0].match\\(/\\\\bsrc=/i\\)\\)return;try{new Function\\(m[1]\\)}catch\\(e\\){console.error\\(e.message\\);ok=false}}\\);console.log\\(ok?'index.html OK':'FAIL'\\)\")",
+      "Bash(cd \"/Users/christiancasanovavera/Documents/Empresas/76.887.709-2 | Sociedad de Profesionales Casanova y Cia Limitada /Finclever |Automatizaciones/Repositorios Finclever/ags-arquitectura\" && rm -f _h4.html && lsof -ti:8765 | xargs kill 2>/dev/null; git add -A && git status --short && echo \"---\" && git commit -m \"Index como HUB de módulos: ARQ Producción y ARQ Comercial *)"
     ]
   }
 }
