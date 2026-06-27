@@ -24,6 +24,14 @@ window.ERP = (function () {
     lectura:     { l: 'Solo Lectura',        color: '#6B7280' }
   };
 
+  // ---- Estados comerciales (venta del anteproyecto/proyecto) ---
+  const COM_ESTADO = {
+    no_disponible: { l: 'No disponible', color: '#6B7280', bg: '#F3F4F6' },
+    disponible:    { l: 'Disponible',    color: '#16A34A', bg: '#DCFCE7' },
+    ofrecido:      { l: 'Ofrecido',      color: '#D97706', bg: '#FEF3C7' },
+    vendido:       { l: 'Vendido',       color: '#7C3AED', bg: '#EDE9FE' }
+  };
+
   // ---- Estados del anteproyecto -------------------------------
   const STATUS_META = {
     estudio:    { l: 'En Estudio',     color: '#F59E0B', bg: '#FEF3C7' },
@@ -55,6 +63,18 @@ window.ERP = (function () {
 
   function fmtM2(n) { return fmtNum(n, 2) + ' m²'; }
 
+  // Pesos chilenos, sin decimales: $39.179.520
+  function fmtCLP(n) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    return '$' + Math.round(Number(n)).toLocaleString('es-CL');
+  }
+
+  // UF completa con punto de miles y coma decimal: UF 4.850,5
+  function fmtUF(n) {
+    if (n === null || n === undefined || n === '' || isNaN(n)) return '—';
+    return 'UF ' + fmtNum(n, Number(n) % 1 === 0 ? 0 : 1);
+  }
+
   function today() { return new Date().toISOString().slice(0, 10); }
 
   // Convención de código de la unidad: AANN + LLL
@@ -84,6 +104,10 @@ window.ERP = (function () {
   function canManageUsers(user) { return user && user.role === 'superadmin'; }
   function canSeeComercial(user) {
     return user && ['superadmin', 'director', 'arquitecto', 'comercial'].includes(user.role);
+  }
+  // Módulo comercial (precios y ventas): Comercial, Director, Super Admin.
+  function canComercial(user) {
+    return user && ['superadmin', 'director', 'comercial'].includes(user.role);
   }
 
   // ---- Parsing numérico (acepta formato chileno o estándar) ----
@@ -188,9 +212,9 @@ window.ERP = (function () {
   }
 
   return {
-    ROLE_ORDER, ROLE_META, STATUS_META, SEED_USERS, AUTH_DOMAIN,
+    ROLE_ORDER, ROLE_META, STATUS_META, COM_ESTADO, SEED_USERS, AUTH_DOMAIN,
     TER_LOTE_FIELDS, NOR_PARAMS, ALT_FIELDS, SUP_FIELDS,
-    fmtNum, fmtM2, today, yy, buildCode, esc, parseNum, cumpleEval,
-    roleLevel, canCreateProject, canEditProject, canManageUsers, canSeeComercial
+    fmtNum, fmtM2, fmtCLP, fmtUF, today, yy, buildCode, esc, parseNum, cumpleEval,
+    roleLevel, canCreateProject, canEditProject, canManageUsers, canSeeComercial, canComercial
   };
 })();

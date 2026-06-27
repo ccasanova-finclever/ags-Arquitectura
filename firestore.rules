@@ -43,6 +43,22 @@ service cloud.firestore {
       }
     }
 
+    // ---- Datos comerciales (precios y ventas) --------------------
+    // Separados del doc técnico del proyecto para dar escritura al rol
+    // Comercial sin exponerle los datos técnicos.
+    match /comercial/{pid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && userRole() in ['superadmin', 'director', 'comercial'];
+    }
+
+    // ---- Configuración (caché de la UF del día, etc.) ------------
+    match /config/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && userRole() in ['superadmin', 'director', 'comercial'];
+    }
+
     // Todo lo demás: denegado.
     match /{document=**} {
       allow read, write: if false;

@@ -56,6 +56,7 @@
     <span class="muted">Anteproyectos</span>
     <span class="spacer"></span>
     <span id="userChip" class="chip" style="background:var(--brand-soft);color:var(--brand)"></span>
+    <button id="btnComercial" class="btn ghost" style="padding:7px 12px;display:none" onclick="location.href='comercial.html'">💼 Comercial</button>
     <button id="btnAdmin" class="btn ghost" style="padding:7px 12px;display:none" onclick="location.href='admin.html'">⚙︎ Admin</button>
     <button class="btn ghost" style="padding:7px 12px" onclick="doLogout()">Salir</button>
   </div>
@@ -217,6 +218,7 @@ function showApp() {
   const meta = ERP.ROLE_META[CURRENT_USER.role] || ERP.ROLE_META.lectura;
   document.getElementById('userChip').textContent = CURRENT_USER.name + ' · ' + meta.l;
   document.getElementById('btnNew').style.display = ERP.canCreateProject(CURRENT_USER) ? 'inline-flex' : 'none';
+  document.getElementById('btnComercial').style.display = ERP.canComercial(CURRENT_USER) ? 'inline-flex' : 'none';
   document.getElementById('btnAdmin').style.display = ERP.canManageUsers(CURRENT_USER) ? 'inline-flex' : 'none';
 
   const sel = document.getElementById('fStatus');
