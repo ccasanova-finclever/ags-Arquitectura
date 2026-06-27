@@ -90,6 +90,7 @@
 <script>
 let CURRENT_USER = null;
 let PROJECTS = [];
+let COM = {};       // estado comercial por proyecto (solo se carga para roles comerciales)
 let _lastHash = { projects: '' };
 let _unsubProjects = null;
 
@@ -120,6 +121,17 @@ function showApp() {
     });
   }
   setupProjectsListener();
+  if (ERP.canComercial(CURRENT_USER)) loadComercial();
+}
+
+// Estado comercial (solo roles comerciales): se cruza con la grilla.
+async function loadComercial() {
+  try {
+    const snap = await db.collection('comercial').get();
+    COM = {};
+    snap.docs.forEach(d => { COM[d.id] = d.data(); });
+    renderProjects();
+  } catch (e) { /* sin acceso o sin datos: la grilla sigue funcionando */ }
 }
 
 function setupProjectsListener() {
@@ -157,6 +169,7 @@ function renderProjects() {
     return;
   }
 
+  const showCom = ERP.canComercial(CURRENT_USER);
   grid.innerHTML = list.map(p => {
     const sm = ERP.STATUS_META[p.status] || ERP.STATUS_META.estudio;
     return '<div class="card project" onclick="openProject(\'' + p.id + '\')">' +
@@ -166,8 +179,27 @@ function renderProjects() {
       '</div>' +
       '<div class="proj-name">' + ERP.esc(p.name) + '</div>' +
       '<div class="proj-meta">📍 ' + ERP.esc(p.comuna || '—') + ' · Creado ' + ERP.esc(p.createdAt || '—') + '</div>' +
+      (showCom ? comChip(COM[p.id]) : '') +
     '</div>';
   }).join('');
+}
+
+// Chip de estado comercial (solo roles comerciales).
+function comChip(c) {
+  if (!c || !c.estado || c.estado === 'no_disponible') return '';
+  const m = ERP.COM_ESTADO[c.estado] || ERP.COM_ESTADO.no_disponible;
+  let precio = '';
+  if (c.estado === 'vendido') {
+    const v = c.tipoVendido === 'anteproyecto' ? c.precioAnteproyectoUF
+            : c.tipoVendido === 'proyecto' ? c.precioProyectoUF
+            : (c.precioProyectoUF || c.precioAnteproyectoUF);
+    if (ERP.parseNum(v)) precio = ' · ' + ERP.fmtUF(ERP.parseNum(v));
+  } else {
+    const v = c.precioProyectoUF || c.precioAnteproyectoUF;
+    if (ERP.parseNum(v)) precio = ' · desde ' + ERP.fmtUF(ERP.parseNum(c.precioAnteproyectoUF || c.precioProyectoUF));
+  }
+  return '<div style="margin-top:10px"><span class="chip" style="background:' + m.bg + ';color:' + m.color + '">💼 ' +
+    m.l + ERP.esc(precio) + '</span></div>';
 }
 
 function openProject(id) { location.href = 'proyecto.html?id=' + encodeURIComponent(id); }
