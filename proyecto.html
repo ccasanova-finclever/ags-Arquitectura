@@ -113,6 +113,7 @@
       </div>
       <h2 id="pName" style="margin-top:10px"></h2>
       <div id="pMeta" class="muted" style="margin-top:6px"></div>
+      <div id="comercialAction" style="margin-top:14px;display:none"></div>
     </div>
 
     <div class="tabs" id="tabs"></div>
@@ -208,6 +209,65 @@ function render() {
     '<button class="tab' + (t.k === CUR_TAB ? ' on' : '') + '" onclick="selTab(\'' + t.k + '\')">' + t.l + '</button>'
   ).join('');
   renderTab(CUR_TAB);
+
+  if (ERP.canComercial(CURRENT_USER)) setupComercialButton();
+}
+
+// ---------- Enviar a módulo comercial ----------
+let _negocioVinculado = null;
+
+async function setupComercialButton() {
+  const box = document.getElementById('comercialAction');
+  box.style.display = 'block';
+  box.innerHTML = '<span class="muted" style="font-size:13px">Revisando estado comercial…</span>';
+  try {
+    const snap = await db.collection('negocios').where('projectId', '==', PID).limit(1).get();
+    _negocioVinculado = snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+  } catch (e) { _negocioVinculado = null; }
+  renderComercialButton();
+}
+
+function renderComercialButton() {
+  const box = document.getElementById('comercialAction');
+  if (_negocioVinculado) {
+    const em = ERP.ESTADO_NEGOCIO[_negocioVinculado.estado] || ERP.ESTADO_NEGOCIO.prospecto;
+    box.innerHTML =
+      '<span class="chip" style="background:' + em.bg + ';color:' + em.color + '">💼 En Comercial · ' + em.l + '</span>' +
+      '<button class="btn ghost" style="margin-left:10px;padding:7px 14px" onclick="location.href=\'comercial.html\'">Ver en Comercial →</button>';
+  } else {
+    box.innerHTML = '<button class="btn" id="btnEnviarCom" onclick="enviarAComercial()">💼 Enviar a módulo comercial</button>' +
+      '<span id="enviarMsg" class="muted" style="margin-left:10px;font-size:13px"></span>';
+  }
+}
+
+async function enviarAComercial() {
+  const btn = document.getElementById('btnEnviarCom');
+  const msg = document.getElementById('enviarMsg');
+  if (btn) btn.disabled = true;
+  if (msg) msg.textContent = 'Enviando…';
+  const negocio = {
+    titulo: PROJECT.name || PROJECT.code || 'Anteproyecto',
+    cliente: '',
+    tipo: 'anteproyecto',
+    estado: 'prospecto',
+    montoUF: '',
+    fechaCierre: '',
+    projectId: PID,
+    leads: [],
+    notas: 'Enviado desde Producción · ' + (PROJECT.code || '') + ' · ' + (PROJECT.comuna || ''),
+    createdAt: new Date().toISOString(),
+    createdBy: CURRENT_USER.email,
+    updatedAt: new Date().toISOString()
+  };
+  try {
+    const ref = await db.collection('negocios').add(negocio);
+    _negocioVinculado = { id: ref.id, ...negocio };
+    logActivity('Envió el anteproyecto a módulo comercial');
+    renderComercialButton();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    if (msg) { msg.textContent = 'Error: ' + e.message; }
+  }
 }
 
 function renderHeader() {
