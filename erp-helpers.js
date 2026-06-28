@@ -32,6 +32,25 @@ window.ERP = (function () {
     vendido:       { l: 'Vendido',       color: '#7C3AED', bg: '#EDE9FE' }
   };
 
+  // ---- Tipos de negocio (columnas del Kanban comercial) --------
+  const TIPO_NEGOCIO = {
+    servicio:     { l: 'Servicios',     icon: '🔧', color: '#0F766E', bg: '#CCFBF1' },
+    proyecto:     { l: 'Proyectos',     icon: '🏢', color: '#2563EB', bg: '#DBEAFE' },
+    anteproyecto: { l: 'Anteproyectos', icon: '📐', color: '#7C3AED', bg: '#EDE9FE' }
+  };
+  const TIPO_NEGOCIO_ORDER = ['servicio', 'proyecto', 'anteproyecto'];
+
+  // ---- Estado del negocio (etapa dentro de cada tarjeta) -------
+  const ESTADO_NEGOCIO = {
+    prospecto:   { l: 'Prospecto',         color: '#6B7280', bg: '#F3F4F6' },
+    propuesta:   { l: 'Propuesta enviada', color: '#B45309', bg: '#FEF3C7' },
+    evaluacion:  { l: 'En evaluación',     color: '#2563EB', bg: '#DBEAFE' },
+    negociacion: { l: 'En negociación',    color: '#DB2777', bg: '#FCE7F3' },
+    adjudicado:  { l: 'Adjudicado',        color: '#16A34A', bg: '#DCFCE7' },
+    perdido:     { l: 'Perdido',           color: '#DC2626', bg: '#FEE2E2' }
+  };
+  const ESTADO_NEGOCIO_ORDER = ['prospecto', 'propuesta', 'evaluacion', 'negociacion', 'adjudicado', 'perdido'];
+
   // ---- Estados del anteproyecto -------------------------------
   const STATUS_META = {
     estudio:    { l: 'En Estudio',     color: '#F59E0B', bg: '#FEF3C7' },
@@ -108,6 +127,10 @@ window.ERP = (function () {
   // Módulo comercial (precios y ventas): Comercial, Director, Super Admin.
   function canComercial(user) {
     return user && ['superadmin', 'director', 'comercial'].includes(user.role);
+  }
+  // Panel ejecutivo (ingresos del pipeline): Director, Super Admin.
+  function canEjecutivo(user) {
+    return user && ['superadmin', 'director'].includes(user.role);
   }
 
   // ---- Parsing numérico (acepta formato chileno o estándar) ----
@@ -213,8 +236,9 @@ window.ERP = (function () {
 
   return {
     ROLE_ORDER, ROLE_META, STATUS_META, COM_ESTADO, SEED_USERS, AUTH_DOMAIN,
+    TIPO_NEGOCIO, TIPO_NEGOCIO_ORDER, ESTADO_NEGOCIO, ESTADO_NEGOCIO_ORDER,
     TER_LOTE_FIELDS, NOR_PARAMS, ALT_FIELDS, SUP_FIELDS,
     fmtNum, fmtM2, fmtCLP, fmtUF, today, yy, buildCode, esc, parseNum, cumpleEval,
-    roleLevel, canCreateProject, canEditProject, canManageUsers, canSeeComercial, canComercial
+    roleLevel, canCreateProject, canEditProject, canManageUsers, canSeeComercial, canComercial, canEjecutivo
   };
 })();

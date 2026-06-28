@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ERP-ARQ">
+<meta name="theme-color" content="#285B35">
+<title>ERP-ARQ · Panel Ejecutivo</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="stylesheet" href="erp-theme.css">
+<style>
+  .tipo-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:18px; }
+  @media (max-width:760px){ .tipo-grid { grid-template-columns:1fr; } }
+  .tipo-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px; border-top:4px solid; }
+  .tipo-card .tc-h { display:flex; align-items:center; gap:8px; font-weight:800; font-size:15px; margin-bottom:12px; }
+  .tipo-card .tc-uf { font-size:26px; font-weight:800; }
+  .tipo-card .tc-clp { font-size:13px; color:var(--ink-soft); margin-top:2px; }
+  .tipo-card .tc-meta { font-size:12px; color:var(--ink-soft); margin-top:10px; }
+
+  .sum-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:8px; }
+  @media (max-width:760px){ .sum-grid { grid-template-columns:1fr 1fr; } }
+  .sumk { background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .sumk .s-l { font-size:11.5px; font-weight:600; color:var(--ink-soft); }
+  .sumk .s-v { font-size:19px; font-weight:800; margin-top:3px; }
+  .sumk .s-s { font-size:11px; color:var(--ink-soft); }
+
+  .etable { width:100%; border-collapse:collapse; font-size:13px; }
+  .etable th { text-align:left; font-size:11px; font-weight:700; color:var(--ink-soft); padding:7px 9px; border-bottom:2px solid var(--line); }
+  .etable td { padding:7px 9px; border-bottom:1px solid var(--line); }
+  .etable .num { text-align:right; white-space:nowrap; font-weight:600; }
+  .bar { height:8px; border-radius:4px; background:var(--line); overflow:hidden; }
+  .bar > span { display:block; height:100%; }
+  .date-soon { color:#B45309; font-weight:700; }
+  .date-over { color:#DC2626; font-weight:700; }
+</style>
+</head>
+<body>
+<div id="appView" style="display:none">
+  <div class="topbar">
+    <button class="btn ghost" style="padding:7px 12px" onclick="location.href='index.html'">← Hub</button>
+    <span class="logo">Panel Ejecutivo</span>
+    <span class="spacer"></span>
+    <span id="ufChip" class="chip" style="background:var(--brand-soft);color:var(--brand)"></span>
+    <span id="userChip" class="chip" style="background:var(--brand-soft);color:var(--brand)"></span>
+  </div>
+
+  <div class="wrap">
+    <h2 style="margin-bottom:4px">Ingresos posibles por tipo de trabajo</h2>
+    <div class="muted" style="margin-bottom:18px">Suma de los montos valorizados del pipeline comercial (excluye negocios perdidos).</div>
+
+    <div class="tipo-grid" id="tipoGrid"></div>
+
+    <div class="card" style="margin-bottom:18px">
+      <h3 style="margin-bottom:14px">Resumen del pipeline</h3>
+      <div class="sum-grid" id="sumGrid"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <h3 style="margin-bottom:14px">Distribución por etapa</h3>
+      <table class="etable"><tbody id="etapaBody"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:14px">Próximos cierres</h3>
+      <table class="etable">
+        <thead><tr><th>Negocio</th><th>Tipo</th><th>Estado</th><th>Cierre</th><th class="num">Monto</th></tr></thead>
+        <tbody id="cierresBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="denyView" style="display:none">
+  <div class="login-wrap"><div class="card login-card" style="text-align:center">
+    <div class="logo">ERP-ARQ</div>
+    <p class="muted" style="margin:16px 0">El panel ejecutivo es solo para Dirección.</p>
+    <button class="btn" onclick="location.href='index.html'">Volver</button>
+  </div></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="erp-helpers.js"></script>
+<script>
+let CURRENT_USER = null;
+let NEGOCIOS = [];
+let UF = null;
+const E = ERP.esc;
+
+fbAuth.onAuthStateChanged(async (u) => {
+  if (!u || !(u.email || '').toLowerCase().endsWith(ERP.AUTH_DOMAIN)) { location.href = 'index.html'; return; }
+  const snap = await db.collection('users').doc(u.email.toLowerCase()).get();
+  CURRENT_USER = snap.exists ? snap.data() : { email: u.email, name: u.email, role: 'lectura' };
+  if (!ERP.canEjecutivo(CURRENT_USER)) { document.getElementById('denyView').style.display = 'block'; return; }
+  document.getElementById('appView').style.display = 'block';
+  document.getElementById('userChip').textContent = CURRENT_USER.name + ' · ' + ERP.ROLE_META[CURRENT_USER.role].l;
+  await loadUF();
+  await loadData();
+});
+
+async function loadUF() {
+  try {
+    const c = await db.collection('config').doc('uf').get();
+    if (c.exists) UF = c.data();
+  } catch (e) {}
+  try {
+    const res = await fetch('https://mindicador.cl/api/uf');
+    const data = await res.json();
+    const item = data.serie[0];
+    UF = { valor: item.valor, fecha: (item.fecha || '').slice(0, 10) };
+    db.collection('config').doc('uf').set({ valor: UF.valor, fecha: UF.fecha, fetchedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+  } catch (e) {}
+  if (UF) document.getElementById('ufChip').textContent = 'UF ' + ERP.fmtCLP(UF.valor);
+}
+
+function clp(uf) { return UF ? uf * UF.valor : null; }
+function montoOf(n) { return ERP.parseNum(n.montoUF) || 0; }
+
+async function loadData() {
+  const snap = await db.collection('negocios').get();
+  NEGOCIOS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  render();
+}
+
+function render() {
+  const activos = NEGOCIOS.filter(n => n.estado !== 'perdido');
+
+  // Por tipo de trabajo
+  document.getElementById('tipoGrid').innerHTML = ERP.TIPO_NEGOCIO_ORDER.map(tipo => {
+    const m = ERP.TIPO_NEGOCIO[tipo];
+    const items = activos.filter(n => (n.tipo || 'proyecto') === tipo);
+    const uf = items.reduce((s, n) => s + montoOf(n), 0);
+    const c = clp(uf);
+    return '<div class="tipo-card" style="border-top-color:' + m.color + '">' +
+      '<div class="tc-h"><span>' + m.icon + '</span><span style="color:' + m.color + '">' + m.l + '</span></div>' +
+      '<div class="tc-uf">' + ERP.fmtUF(uf) + '</div>' +
+      (c != null ? '<div class="tc-clp">' + ERP.fmtCLP(c) + '</div>' : '') +
+      '<div class="tc-meta">' + items.length + ' negocio(s) en pipeline</div>' +
+    '</div>';
+  }).join('');
+
+  // Resumen: total pipeline, adjudicado, en negociación, perdido
+  const totUF = activos.reduce((s, n) => s + montoOf(n), 0);
+  const adjUF = NEGOCIOS.filter(n => n.estado === 'adjudicado').reduce((s, n) => s + montoOf(n), 0);
+  const negocUF = NEGOCIOS.filter(n => n.estado === 'negociacion').reduce((s, n) => s + montoOf(n), 0);
+  const perdUF = NEGOCIOS.filter(n => n.estado === 'perdido').reduce((s, n) => s + montoOf(n), 0);
+  const sk = (l, uf, color) => '<div class="sumk"><div class="s-l">' + l + '</div>' +
+    '<div class="s-v" style="color:' + (color || 'var(--ink)') + '">' + ERP.fmtUF(uf) + '</div>' +
+    '<div class="s-s">' + (clp(uf) != null ? ERP.fmtCLP(clp(uf)) : '') + '</div></div>';
+  document.getElementById('sumGrid').innerHTML =
+    sk('Pipeline activo', totUF, '#285B35') +
+    sk('Adjudicado', adjUF, '#16A34A') +
+    sk('En negociación', negocUF, '#DB2777') +
+    sk('Perdido', perdUF, '#DC2626');
+
+  // Por etapa
+  const maxUF = Math.max(1, ...ERP.ESTADO_NEGOCIO_ORDER.map(es => NEGOCIOS.filter(n => n.estado === es).reduce((s, n) => s + montoOf(n), 0)));
+  document.getElementById('etapaBody').innerHTML = ERP.ESTADO_NEGOCIO_ORDER.map(es => {
+    const m = ERP.ESTADO_NEGOCIO[es];
+    const items = NEGOCIOS.filter(n => (n.estado || 'prospecto') === es);
+    const uf = items.reduce((s, n) => s + montoOf(n), 0);
+    const pct = Math.round(uf / maxUF * 100);
+    return '<tr><td style="width:160px"><span class="chip" style="background:' + m.bg + ';color:' + m.color + '">' + m.l + '</span></td>' +
+      '<td><div class="bar"><span style="width:' + pct + '%;background:' + m.color + '"></span></div></td>' +
+      '<td class="num" style="width:70px">' + items.length + '</td>' +
+      '<td class="num" style="width:130px">' + ERP.fmtUF(uf) + '</td></tr>';
+  }).join('');
+
+  // Próximos cierres (activos con fecha, ordenados)
+  const conFecha = activos.filter(n => n.fechaCierre).sort((a, b) => a.fechaCierre.localeCompare(b.fechaCierre));
+  document.getElementById('cierresBody').innerHTML = conFecha.length
+    ? conFecha.slice(0, 15).map(n => {
+        const tm = ERP.TIPO_NEGOCIO[n.tipo] || ERP.TIPO_NEGOCIO.proyecto;
+        const em = ERP.ESTADO_NEGOCIO[n.estado] || ERP.ESTADO_NEGOCIO.prospecto;
+        return '<tr><td>' + E(n.titulo || '—') + (n.cliente ? ' <span class="muted">· ' + E(n.cliente) + '</span>' : '') + '</td>' +
+          '<td>' + tm.icon + ' ' + tm.l + '</td>' +
+          '<td><span class="chip" style="background:' + em.bg + ';color:' + em.color + '">' + em.l + '</span></td>' +
+          '<td class="' + dateClass(n.fechaCierre) + '">' + fmtFecha(n.fechaCierre) + '</td>' +
+          '<td class="num">' + ERP.fmtUF(montoOf(n)) + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="5" class="muted">Sin cierres programados.</td></tr>';
+}
+
+function fmtFecha(iso) { const p = String(iso).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '-' + p[1] + '-' + p[0] : iso; }
+function dateClass(iso) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (iso < today) return 'date-over';
+  const in15 = new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10);
+  return iso <= in15 ? 'date-soon' : '';
+}
+</script>
+</body>
+</html>

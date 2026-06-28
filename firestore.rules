@@ -52,6 +52,13 @@ service cloud.firestore {
         && userRole() in ['superadmin', 'director', 'comercial'];
     }
 
+    // ---- Negocios (pipeline comercial: Kanban + leads) -----------
+    match /negocios/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && userRole() in ['superadmin', 'director', 'comercial'];
+    }
+
     // ---- Configuración (caché de la UF del día, etc.) ------------
     match /config/{doc} {
       allow read: if isSignedIn();

@@ -75,7 +75,12 @@
       <div class="card hubcard" id="card-comercial" style="display:none" onclick="location.href='comercial.html'">
         <div class="hub-icon" style="background:#EDE9FE;color:#7C3AED">💼</div>
         <h3>ARQ Comercial</h3>
-        <p>Venta de anteproyectos valorizada en UF, conversión a pesos con la UF del día y seguimiento del pipeline de ventas.</p>
+        <p>Pipeline de negocios (Servicios, Proyectos, Anteproyectos) tipo Kanban, valorizado en UF con leads y fecha de cierre.</p>
+      </div>
+      <div class="card hubcard" id="card-ejecutivo" style="display:none" onclick="location.href='ejecutivo.html'">
+        <div class="hub-icon" style="background:#DCFCE7;color:#16A34A">📊</div>
+        <h3>Panel Ejecutivo</h3>
+        <p>Ingresos posibles por tipo de trabajo, resumen del pipeline en UF y pesos, y próximos cierres de negocio.</p>
       </div>
     </div>
   </div>
@@ -173,6 +178,7 @@ function showHub() {
   document.getElementById('userChip').textContent = CURRENT_USER.name + ' · ' + meta.l;
   document.getElementById('hubHi').textContent = 'Hola, ' + (CURRENT_USER.name || '').split(' ')[0];
   document.getElementById('card-comercial').style.display = ERP.canComercial(CURRENT_USER) ? 'flex' : 'none';
+  document.getElementById('card-ejecutivo').style.display = ERP.canEjecutivo(CURRENT_USER) ? 'flex' : 'none';
   document.getElementById('btnAdmin').style.display = ERP.canManageUsers(CURRENT_USER) ? 'inline-flex' : 'none';
 }
 

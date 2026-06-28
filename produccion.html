@@ -90,7 +90,7 @@
 <script>
 let CURRENT_USER = null;
 let PROJECTS = [];
-let COM = {};       // estado comercial por proyecto (solo se carga para roles comerciales)
+let NEG_BY_PROJECT = {};  // projectId -> [negocios] (solo se carga para roles comerciales)
 let _lastHash = { projects: '' };
 let _unsubProjects = null;
 
@@ -121,15 +121,18 @@ function showApp() {
     });
   }
   setupProjectsListener();
-  if (ERP.canComercial(CURRENT_USER)) loadComercial();
+  if (ERP.canComercial(CURRENT_USER)) loadNegocios();
 }
 
-// Estado comercial (solo roles comerciales): se cruza con la grilla.
-async function loadComercial() {
+// Negocios vinculados (solo roles comerciales): se cruzan con la grilla por projectId.
+async function loadNegocios() {
   try {
-    const snap = await db.collection('comercial').get();
-    COM = {};
-    snap.docs.forEach(d => { COM[d.id] = d.data(); });
+    const snap = await db.collection('negocios').get();
+    NEG_BY_PROJECT = {};
+    snap.docs.forEach(d => {
+      const n = d.data();
+      if (n.projectId) { (NEG_BY_PROJECT[n.projectId] = NEG_BY_PROJECT[n.projectId] || []).push(n); }
+    });
     renderProjects();
   } catch (e) { /* sin acceso o sin datos: la grilla sigue funcionando */ }
 }
@@ -179,27 +182,24 @@ function renderProjects() {
       '</div>' +
       '<div class="proj-name">' + ERP.esc(p.name) + '</div>' +
       '<div class="proj-meta">📍 ' + ERP.esc(p.comuna || '—') + ' · Creado ' + ERP.esc(p.createdAt || '—') + '</div>' +
-      (showCom ? comChip(COM[p.id]) : '') +
+      (showCom ? comChip(p.id) : '') +
     '</div>';
   }).join('');
 }
 
-// Chip de estado comercial (solo roles comerciales).
-function comChip(c) {
-  if (!c || !c.estado || c.estado === 'no_disponible') return '';
-  const m = ERP.COM_ESTADO[c.estado] || ERP.COM_ESTADO.no_disponible;
-  let precio = '';
-  if (c.estado === 'vendido') {
-    const v = c.tipoVendido === 'anteproyecto' ? c.precioAnteproyectoUF
-            : c.tipoVendido === 'proyecto' ? c.precioProyectoUF
-            : (c.precioProyectoUF || c.precioAnteproyectoUF);
-    if (ERP.parseNum(v)) precio = ' · ' + ERP.fmtUF(ERP.parseNum(v));
-  } else {
-    const v = c.precioProyectoUF || c.precioAnteproyectoUF;
-    if (ERP.parseNum(v)) precio = ' · desde ' + ERP.fmtUF(ERP.parseNum(c.precioAnteproyectoUF || c.precioProyectoUF));
-  }
+// Chip de negocios vinculados (solo roles comerciales).
+function comChip(projectId) {
+  const negs = (NEG_BY_PROJECT[projectId] || []).filter(n => n.estado !== 'perdido');
+  if (!negs.length) return '';
+  const totUF = negs.reduce((s, n) => s + (ERP.parseNum(n.montoUF) || 0), 0);
+  // Estado más avanzado entre los negocios vinculados
+  const orden = ERP.ESTADO_NEGOCIO_ORDER;
+  let best = negs[0].estado || 'prospecto';
+  negs.forEach(n => { if (orden.indexOf(n.estado) > orden.indexOf(best)) best = n.estado; });
+  const m = ERP.ESTADO_NEGOCIO[best] || ERP.ESTADO_NEGOCIO.prospecto;
+  const detalle = (negs.length > 1 ? negs.length + ' negocios' : m.l) + (totUF ? ' · ' + ERP.fmtUF(totUF) : '');
   return '<div style="margin-top:10px"><span class="chip" style="background:' + m.bg + ';color:' + m.color + '">💼 ' +
-    m.l + ERP.esc(precio) + '</span></div>';
+    ERP.esc(detalle) + '</span></div>';
 }
 
 function openProject(id) { location.href = 'proyecto.html?id=' + encodeURIComponent(id); }
