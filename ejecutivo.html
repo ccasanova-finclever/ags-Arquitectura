@@ -107,16 +107,16 @@ fbAuth.onAuthStateChanged(async (u) => {
 async function loadUF() {
   try {
     const c = await db.collection('config').doc('uf').get();
-    if (c.exists) UF = c.data();
+    if (c.exists) { const d = c.data(); UF = { valor: ERP.ufRound(d.valor), fecha: d.fecha }; }
   } catch (e) {}
   try {
     const res = await fetch('https://mindicador.cl/api/uf');
     const data = await res.json();
     const item = data.serie[0];
-    UF = { valor: item.valor, fecha: (item.fecha || '').slice(0, 10) };
+    UF = { valor: ERP.ufRound(item.valor), fecha: (item.fecha || '').slice(0, 10) };
     db.collection('config').doc('uf').set({ valor: UF.valor, fecha: UF.fecha, fetchedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
   } catch (e) {}
-  if (UF) document.getElementById('ufChip').textContent = 'UF ' + ERP.fmtCLP(UF.valor);
+  if (UF) document.getElementById('ufChip').textContent = 'UF ' + ERP.fmtUFValor(UF.valor);
 }
 
 function clp(uf) { return UF ? uf * UF.valor : null; }

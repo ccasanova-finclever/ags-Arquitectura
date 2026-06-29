@@ -94,6 +94,17 @@ window.ERP = (function () {
     return 'UF ' + fmtNum(n, Number(n) % 1 === 0 ? 0 : 1);
   }
 
+  // Valor de la UF del día (en pesos) SIEMPRE con 2 decimales: $39.179,52
+  function fmtUFValor(n) {
+    if (n === null || n === undefined || n === '' || isNaN(n)) return '—';
+    return '$' + fmtNum(n, 2);
+  }
+  // Redondea el valor de la UF a 2 decimales al tomarla.
+  function ufRound(n) {
+    const v = Number(n);
+    return isNaN(v) ? null : Math.round(v * 100) / 100;
+  }
+
   function today() { return new Date().toISOString().slice(0, 10); }
 
   // Convención de código de la unidad: AANN + LLL
@@ -238,7 +249,7 @@ window.ERP = (function () {
     ROLE_ORDER, ROLE_META, STATUS_META, COM_ESTADO, SEED_USERS, AUTH_DOMAIN,
     TIPO_NEGOCIO, TIPO_NEGOCIO_ORDER, ESTADO_NEGOCIO, ESTADO_NEGOCIO_ORDER,
     TER_LOTE_FIELDS, NOR_PARAMS, ALT_FIELDS, SUP_FIELDS,
-    fmtNum, fmtM2, fmtCLP, fmtUF, today, yy, buildCode, esc, parseNum, cumpleEval,
+    fmtNum, fmtM2, fmtCLP, fmtUF, fmtUFValor, ufRound, today, yy, buildCode, esc, parseNum, cumpleEval,
     roleLevel, canCreateProject, canEditProject, canManageUsers, canSeeComercial, canComercial, canEjecutivo
   };
 })();

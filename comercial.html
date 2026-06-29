@@ -182,7 +182,7 @@ fbAuth.onAuthStateChanged(async (u) => {
 async function loadUF() {
   try {
     const c = await db.collection('config').doc('uf').get();
-    if (c.exists) { const d = c.data(); UF = { valor: d.valor, fecha: d.fecha, source: 'caché' }; renderUF(); }
+    if (c.exists) { const d = c.data(); UF = { valor: ERP.ufRound(d.valor), fecha: d.fecha, source: 'caché' }; renderUF(); }
   } catch (e) {}
   await refreshUF(true);
 }
@@ -191,7 +191,7 @@ async function refreshUF(silent) {
     const res = await fetch('https://mindicador.cl/api/uf');
     const data = await res.json();
     const item = data.serie[0];
-    UF = { valor: item.valor, fecha: (item.fecha || '').slice(0, 10), source: 'mindicador.cl' };
+    UF = { valor: ERP.ufRound(item.valor), fecha: (item.fecha || '').slice(0, 10), source: 'mindicador.cl' };
     db.collection('config').doc('uf').set({ valor: UF.valor, fecha: UF.fecha, fetchedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
     renderUF();
     if (!silent) renderBoard();
@@ -201,7 +201,7 @@ async function refreshUF(silent) {
 }
 function renderUF() {
   if (!UF) return;
-  document.getElementById('ufVal').textContent = ERP.fmtCLP(UF.valor);
+  document.getElementById('ufVal').textContent = ERP.fmtUFValor(UF.valor);
   document.getElementById('ufMeta').textContent = 'al ' + fmtFecha(UF.fecha) + ' · fuente: ' + UF.source;
   renderBoard();
 }
